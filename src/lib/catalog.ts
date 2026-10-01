@@ -16,6 +16,15 @@ export type Product = {
   badge?: string;
 };
 
+export type StockStatus = "in-stock" | "low-stock" | "out-of-stock";
+
+export type ProductDetails = {
+  description: string;
+  details: string[];
+  /** Units available; drives the stock state shown on the product page. */
+  stock: number;
+};
+
 export type Collection = {
   slug: string;
   eyebrow: string;
@@ -223,3 +232,71 @@ export const campaign = {
   title: "Considered wardrobes",
   image: unsplash("1490481651871-ab68de25d43d", "Rail of cream and brown garments on wooden hangers"),
 };
+
+const productDetails: Record<string, ProductDetails> = {
+  "structured-top-handle-bag": {
+    description: "A rigid, architectural handbag in smooth calf leather, finished with a polished metal clasp and a detachable shoulder strap.",
+    details: ["Smooth calf leather", "Suede-lined interior", "Detachable strap", "Made in Italy"],
+    stock: 6,
+  },
+  "chevron-shoulder-bag": {
+    description: "A soft shoulder bag with a quilted chevron panel, cut slim to sit close to the body.",
+    details: ["Lambskin leather", "Magnetic closure", "Interior zip pocket", "Made in Italy"],
+    stock: 2,
+  },
+  "classic-leather-biker-jacket": {
+    description: "The house biker, cut from supple lambskin with an asymmetric zip, notched collar and silk lining.",
+    details: ["Lambskin leather", "Silk lining", "Asymmetric zip", "Made in Portugal"],
+    stock: 4,
+  },
+  "suede-derby-shoe": {
+    description: "A lace-up derby in soft Italian suede on a lightweight leather sole, hand-stitched in small runs.",
+    details: ["Italian suede", "Leather sole", "Goodyear welted", "Made in Italy"],
+    stock: 0,
+  },
+  "pearl-strand-necklace": {
+    description: "A single strand of lustrous freshwater pearls, hand-knotted and closed with a gold-plated clasp.",
+    details: ["Freshwater pearls", "Hand-knotted silk thread", "18k gold-plated clasp", "Length 45 cm"],
+    stock: 3,
+  },
+  "round-metal-sunglasses": {
+    description: "Fine round frames in brushed gold metal with tinted green lenses and adjustable nose pads.",
+    details: ["Metal frame", "Green UV400 lenses", "Case included", "Made in Japan"],
+    stock: 12,
+  },
+  "fringed-knit-poncho": {
+    description: "A generous poncho knitted in a cream wool blend and finished with long hand-tied fringe.",
+    details: ["Wool and cashmere blend", "Hand-tied fringe", "One size", "Dry clean only"],
+    stock: 5,
+  },
+  "bifold-leather-wallet": {
+    description: "A slim bifold in vegetable-tanned leather that darkens gracefully with use.",
+    details: ["Vegetable-tanned leather", "Six card slots", "Two note compartments", "Made in Italy"],
+    stock: 20,
+  },
+};
+
+const fallbackDetails: ProductDetails = {
+  description: "Crafted in small runs by our ateliers from carefully selected materials.",
+  details: ["Crafted in small runs", "Complimentary gift packaging"],
+  stock: 8,
+};
+
+export const allProducts: Product[] = [...newArrivals, ...giftEdit];
+
+export function getProduct(slug: string) {
+  const product = allProducts.find((item) => item.slug === slug);
+  if (!product) return undefined;
+  return { ...product, ...(productDetails[slug] ?? fallbackDetails) };
+}
+
+export function getRelatedProducts(product: Product, limit = 4) {
+  const others = allProducts.filter((item) => item.slug !== product.slug);
+  const same = others.filter((item) => item.category === product.category);
+  return [...same, ...others.filter((item) => item.category !== product.category)].slice(0, limit);
+}
+
+export function getStockStatus(stock: number): StockStatus {
+  if (stock <= 0) return "out-of-stock";
+  return stock <= 3 ? "low-stock" : "in-stock";
+}
