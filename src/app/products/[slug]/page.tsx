@@ -14,26 +14,31 @@ import {
   ProductGrid,
   Text,
 } from "@/components/ui";
-import { allProducts, formatPrice, getProduct, getRelatedProducts } from "@/lib/catalog";
+import { formatPrice } from "@/lib/catalog";
+import { getProduct, getProductSlugs, getRelatedProducts } from "@/lib/products";
 
-export function generateStaticParams() {
-  return allProducts.map((product) => ({ slug: product.slug }));
+// Stock comes from Postgres; refresh prerendered pages at most once a minute.
+export const revalidate = 60;
+
+export async function generateStaticParams() {
+  const slugs = await getProductSlugs();
+  return slugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: PageProps<"/products/[slug]">): Promise<Metadata> {
   const { slug } = await params;
-  const product = getProduct(slug);
+  const product = await getProduct(slug);
   if (!product) return {};
   return { title: product.name, description: product.description };
 }
 
 export default async function ProductPage({ params }: PageProps<"/products/[slug]">) {
   const { slug } = await params;
-  const product = getProduct(slug);
+  const product = await getProduct(slug);
   if (!product) notFound();
 
   const soldOut = product.stock <= 0;
-  const related = getRelatedProducts(product);
+  const related = await getRelatedProducts(product);
 
   return (
     <main id="main" className="flex-1">
@@ -71,7 +76,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
             {product.name}
           </Heading>
           <Text size="md" className="mt-4">
-            {formatPrice(product.price)}
+            {formatPrice(product.priceCents)}
           </Text>
 
           <StockStatus stock={product.stock} className="mt-6" />

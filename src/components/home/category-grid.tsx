@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { CatalogImage, MediaFrame } from "@/components/ui";
-import { categories } from "@/lib/catalog";
+import { getHomeCategories } from "@/lib/products";
 import { SectionHeading } from "./section-heading";
 
-export function CategoryGrid() {
+export async function CategoryGrid() {
+  const categories = await getHomeCategories();
+
   return (
     <section aria-labelledby="categories-title" className="section-y">
       <div className="container-page">

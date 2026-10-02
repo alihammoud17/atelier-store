@@ -7,9 +7,14 @@ import { SectionHeading } from "@/components/home/section-heading";
 import { Services } from "@/components/home/services";
 import { ProductCard } from "@/components/product/product-card";
 import { ProductGrid, Rail } from "@/components/ui";
-import { giftEdit, newArrivals } from "@/lib/catalog";
+import { getGiftEdit, getNewArrivals } from "@/lib/products";
 
-export default function Home() {
+// Catalog data comes from Postgres; refresh the prerendered page at most once a minute.
+export const revalidate = 60;
+
+export default async function Home() {
+  const [newArrivals, giftEdit] = await Promise.all([getNewArrivals(), getGiftEdit()]);
+
   return (
     <main id="main" className="flex-1">
       <Hero />

@@ -34,7 +34,7 @@ export function ProductCard({ product, sizes = cardSizes }: { product: Product; 
             {product.name}
           </Link>
         </h3>
-        <p className="text-sm text-ink-muted">{formatPrice(product.price)}</p>
+        <p className="text-sm text-ink-muted">{formatPrice(product.priceCents)}</p>
       </div>
     </article>
   );

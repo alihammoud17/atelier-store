@@ -1,0 +1,106 @@
+import "server-only";
+
+import { asc, desc, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { cache } from "react";
+import { db } from "@/db";
+import { categories, products, productStock } from "@/db/schema";
+import type { Collection, Product, ProductDetails } from "@/lib/catalog";
+
+// Catalog reads for Server Components. This is the only storefront module that imports `@/db`.
+
+const productColumns = {
+  id: products.id,
+  slug: products.slug,
+  name: products.name,
+  category: categories.name,
+  priceCents: products.priceCents,
+  imageSrc: products.imageSrc,
+  imageAlt: products.imageAlt,
+  badge: products.badge,
+};
+
+type ProductRow = {
+  id: number;
+  slug: string;
+  name: string;
+  category: string;
+  priceCents: number;
+  imageSrc: string;
+  imageAlt: string;
+  badge: string | null;
+};
+
+function toProduct({ imageSrc, imageAlt, badge, ...row }: ProductRow): Product {
+  return { ...row, image: { src: imageSrc, alt: imageAlt }, badge: badge ?? undefined };
+}
+
+function selectProducts() {
+  return db
+    .select(productColumns)
+    .from(products)
+    .innerJoin(categories, eq(products.categoryId, categories.id));
+}
+
+export async function getNewArrivals(limit = 8) {
+  const rows = await selectProducts().orderBy(desc(products.createdAt)).limit(limit);
+  return rows.map(toProduct);
+}
+
+export async function getGiftEdit() {
+  const rows = await selectProducts()
+    .where(eq(products.isGiftEdit, true))
+    .orderBy(desc(products.createdAt));
+  return rows.map(toProduct);
+}
+
+/** Categories with a grid image, in grid order. */
+export async function getHomeCategories(): Promise<Collection[]> {
+  const rows = await db
+    .select()
+    .from(categories)
+    .where(isNotNull(categories.imageSrc))
+    .orderBy(asc(categories.position));
+  return rows.map((row) => ({
+    slug: row.slug,
+    eyebrow: row.name,
+    title: row.title,
+    image: { src: row.imageSrc ?? "", alt: row.imageAlt ?? "" },
+  }));
+}
+
+export async function getProductSlugs() {
+  const rows = await db.select({ slug: products.slug }).from(products);
+  return rows.map((row) => row.slug);
+}
+
+export type ProductWithDetails = Product & ProductDetails & { categoryId: number };
+
+// Wrapped in `cache` so generateMetadata and the page share one query per request.
+export const getProduct = cache(async (slug: string): Promise<ProductWithDetails | undefined> => {
+  const [row] = await db
+    .select({
+      ...productColumns,
+      categoryId: products.categoryId,
+      description: products.description,
+      details: products.details,
+      stock: sql<number>`coalesce(${productStock.quantity}, 0)`.mapWith(Number),
+    })
+    .from(products)
+    .innerJoin(categories, eq(products.categoryId, categories.id))
+    .leftJoin(productStock, eq(productStock.productId, products.id))
+    .where(eq(products.slug, slug))
+    .limit(1);
+  if (!row) return undefined;
+
+  const { categoryId, description, details, stock, ...product } = row;
+  return { ...toProduct(product), categoryId, description, details, stock };
+});
+
+/** Same-category pieces first, then the rest of the catalog, newest first. */
+export async function getRelatedProducts(product: ProductWithDetails, limit = 4) {
+  const rows = await selectProducts()
+    .where(ne(products.id, product.id))
+    .orderBy(sql`(${products.categoryId} = ${product.categoryId}) desc`, desc(products.createdAt))
+    .limit(limit);
+  return rows.map(toProduct);
+}
