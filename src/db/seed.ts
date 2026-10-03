@@ -1,5 +1,5 @@
 // Seeds the starter catalog. Safe to rerun: rows are upserted by slug.
-// Usage: npm run db:seed
+// Usage: pnpm db:seed
 import "dotenv/config";
 import { sql } from "drizzle-orm";
 import { db } from "./index";
