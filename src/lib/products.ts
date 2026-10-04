@@ -1,6 +1,6 @@
 import "server-only";
 
-import { asc, desc, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { asc, desc, eq, ilike, isNotNull, ne, or, sql } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
 import { categories, products, productStock } from "@/db/schema";
@@ -43,6 +43,23 @@ function selectProducts() {
 
 export async function getNewArrivals(limit = 8) {
   const rows = await selectProducts().orderBy(desc(products.createdAt)).limit(limit);
+  return rows.map(toProduct);
+}
+
+/** Case-insensitive match on name, category and description; name matches first, then newest. */
+export async function searchProducts(query: string, limit = 48) {
+  // Escape LIKE wildcards so "%" or "_" in the query match literally.
+  const pattern = `%${query.replace(/[\\%_]/g, "\\$&")}%`;
+  const rows = await selectProducts()
+    .where(
+      or(
+        ilike(products.name, pattern),
+        ilike(categories.name, pattern),
+        ilike(products.description, pattern),
+      ),
+    )
+    .orderBy(sql`(${products.name} ilike ${pattern}) desc`, desc(products.createdAt))
+    .limit(limit);
   return rows.map(toProduct);
 }
 
