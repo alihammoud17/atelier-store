@@ -68,6 +68,28 @@ export async function getHomeCategories(): Promise<Collection[]> {
   }));
 }
 
+export async function getCategorySlugs() {
+  const rows = await db.select({ slug: categories.slug }).from(categories);
+  return rows.map((row) => row.slug);
+}
+
+// Wrapped in `cache` so generateMetadata and the page share one query per request.
+export const getCategory = cache(async (slug: string) => {
+  const [row] = await db
+    .select({ id: categories.id, slug: categories.slug, name: categories.name, title: categories.title })
+    .from(categories)
+    .where(eq(categories.slug, slug))
+    .limit(1);
+  return row;
+});
+
+export async function getCategoryProducts(categoryId: number) {
+  const rows = await selectProducts()
+    .where(eq(products.categoryId, categoryId))
+    .orderBy(desc(products.createdAt));
+  return rows.map(toProduct);
+}
+
 export async function getProductSlugs() {
   const rows = await db.select({ slug: products.slug }).from(products);
   return rows.map((row) => row.slug);
