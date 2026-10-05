@@ -12,7 +12,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "auth:generate": "pnpm dlx auth@latest generate --config src/lib/auth.ts --output src/db/auth-schema.ts",
+    "auth:generate": "pnpm dlx auth@latest generate --config src/lib/auth.ts --output src/db/auth-schema.ts --yes && tsx src/db/patch-auth-schema.ts",
+    "auth:make-admin": "tsx src/db/make-admin.ts",
     "typecheck": "tsc --noEmit",
     "db:seed": "tsx src/db/seed.ts"
   },
