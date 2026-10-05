@@ -24,7 +24,7 @@ pnpm auth:generate  # regenerate src/db/auth-schema.ts from the Better Auth conf
 pnpm auth:make-admin <email>  # give an existing user the admin role
 ```
 
-No test framework is set up yet.
+No test framework is set up yet. Pure helpers can have `node:test` files run through the existing tsx, e.g. `pnpm exec tsx --test src/lib/bag.test.ts`.
 
 The package manager is pnpm, pinned through `packageManager` in `package.json`. Use `pnpm dlx` instead of `npx`. pnpm skips dependency build scripts unless they're allowed under `allowBuilds` in `pnpm-workspace.yaml`. esbuild (for tsx and drizzle-kit) and unrs-resolver (for eslint-config-next) are allowed there already, so add any new dependency that needs a postinstall step too.
 
@@ -62,3 +62,10 @@ Stack: App Router under `src/app`, TypeScript with the `@/*` → `src/*` path al
 - `src/proxy.ts` redirects `/account/*` and `/admin/*` when there's no session cookie. That check is optimistic only (it never hits the DB), so it's never the real check.
 - Don't read the session in shared UI like `SiteHeader`. That would make every catalog page dynamic.
 - Pass any `?next=` redirect through `safeNext()` from `lib/redirects.ts` (it allows same-origin paths only).
+
+**Bag (`src/lib/bag*.ts`, `src/app/bag/`, `src/components/bag/`)**
+- The shopping bag is a cookie (`atelier_bag`, e.g. `12:2,15:1`) that holds product IDs and quantities **only**. There's no table yet, and guests and signed-in customers share the same mechanism.
+- Prices, names and stock are always read live through `getBagProducts()` in `lib/products.ts`, never from the client. `lib/bag-server.ts` (`server-only`) owns cookie reads and writes and `getBag()`. `lib/bag.ts` is client-safe (types, parsing, `subtotalCents`).
+- `app/bag/actions.ts` (`addToBag`, `updateBagQuantity`, `removeFromBag`) validates every argument and clamps quantities to live stock. `/bag` displays `min(quantity, stock)` and flags the difference, because it can't rewrite the cookie during render.
+- The bag doesn't reserve stock. Checkout must re-check stock and decrement it in a transaction.
+- The header count comes from `BagLink`, which reads the cookie in the browser so `SiteHeader` stays static. Client bag controls go through `useBagAction`, which dispatches the `bag-change` event that `BagLink` listens for.

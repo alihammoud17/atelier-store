@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AddToBagForm } from "@/components/bag/add-to-bag-form";
 import { SectionHeading } from "@/components/home/section-heading";
 import { ProductCard } from "@/components/product/product-card";
 import { StockStatus } from "@/components/product/stock-status";
 import { WishlistButton } from "@/components/product/wishlist-button";
 import {
-  Button,
   CatalogImage,
   Eyebrow,
   Heading,
@@ -81,14 +81,13 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
 
           <StockStatus stock={product.stock} className="mt-6" />
 
-          <div className="mt-6 flex items-center gap-2">
-            <Button block disabled={soldOut}>
-              {soldOut ? "Sold out" : "Add to bag"}
-            </Button>
-            <WishlistButton productName={product.name} className="shrink-0 border border-line" />
+          <div className="mt-6">
+            <AddToBagForm productId={product.id} soldOut={soldOut}>
+              <WishlistButton productName={product.name} className="shrink-0 border border-line" />
+            </AddToBagForm>
           </div>
 
-          <Text tone="muted" className="mt-8">
+          <Text tone="muted" className="mt-5">
             {product.description}
           </Text>
 

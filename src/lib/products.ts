@@ -1,6 +1,6 @@
 import "server-only";
 
-import { asc, desc, eq, ilike, isNotNull, ne, or, sql } from "drizzle-orm";
+import { asc, desc, eq, ilike, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
 import { categories, products, productStock } from "@/db/schema";
@@ -142,4 +142,19 @@ export async function getRelatedProducts(product: ProductWithDetails, limit = 4)
     .orderBy(sql`(${products.categoryId} = ${product.categoryId}) desc`, desc(products.createdAt))
     .limit(limit);
   return rows.map(toProduct);
+}
+
+/** Live price, details and stock for the products in a bag. Missing IDs are simply absent. */
+export async function getBagProducts(ids: number[]) {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select({
+      ...productColumns,
+      stock: sql<number>`coalesce(${productStock.quantity}, 0)`.mapWith(Number),
+    })
+    .from(products)
+    .innerJoin(categories, eq(products.categoryId, categories.id))
+    .leftJoin(productStock, eq(productStock.productId, products.id))
+    .where(inArray(products.id, ids));
+  return rows.map(({ stock, ...product }) => ({ ...toProduct(product), stock }));
 }
