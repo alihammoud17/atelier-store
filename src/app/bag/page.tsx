@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BagLineItem } from "@/components/bag/bag-line-item";
-import { Button, ButtonLink, Eyebrow, Heading, Text } from "@/components/ui";
+import { CheckoutButton } from "@/components/checkout/checkout-button";
+import { ButtonLink, Eyebrow, Heading, Text } from "@/components/ui";
 import { BagIcon } from "@/components/ui/icons";
 import { countItems } from "@/lib/bag";
 import { getBag } from "@/lib/bag-server";
@@ -13,7 +14,9 @@ export const metadata: Metadata = {
 };
 
 // Reads the bag cookie, so this page renders per request with live prices and stock.
-export default async function BagPage() {
+export default async function BagPage({ searchParams }: PageProps<"/bag">) {
+  const { checkout } = await searchParams;
+  const cancelled = checkout === "cancelled";
   const { items, subtotalCents } = await getBag();
   const itemCount = countItems(items);
   const hasAdjustments = items.some((item) => item.quantity < item.requested);
@@ -47,6 +50,13 @@ export default async function BagPage() {
             </Text>
           )}
         </header>
+
+        {cancelled && (
+          <p role="status" className="mb-6 border border-line px-4 py-3 text-sm">
+            Checkout was cancelled and you haven&rsquo;t been charged. Your bag is just as you left
+            it.
+          </p>
+        )}
 
         {items.length === 0 ? (
           <div className="flex flex-col items-center gap-5 border border-line px-6 py-16 text-center md:py-24">
@@ -104,11 +114,9 @@ export default async function BagPage() {
               </dl>
               <Text size="sm" tone="muted">
                 {hasSoldOut && "Sold-out pieces aren't included. "}
-                Taxes are calculated at checkout.
+                You&rsquo;ll enter your shipping address and pay securely with Stripe.
               </Text>
-              <Button block disabled>
-                Checkout coming soon
-              </Button>
+              <CheckoutButton disabled={subtotalCents === 0} />
             </aside>
           </div>
         )}

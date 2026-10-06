@@ -22,13 +22,14 @@ pnpm db:seed      # upsert the starter catalog from src/db/seed-data.ts (resets 
 
 pnpm auth:generate  # regenerate src/db/auth-schema.ts from the Better Auth config (+ timestamptz patch)
 pnpm auth:make-admin <email>  # give an existing user the admin role
+pnpm orders:reconcile  # settle pending/processing orders older than 35 min from Stripe (missed webhooks)
 ```
 
 No test framework is set up yet. Pure helpers can have `node:test` files run through the existing tsx, e.g. `pnpm exec tsx --test src/lib/bag.test.ts`.
 
 The package manager is pnpm, pinned through `packageManager` in `package.json`. Use `pnpm dlx` instead of `npx`. pnpm skips dependency build scripts unless they're allowed under `allowBuilds` in `pnpm-workspace.yaml`. esbuild (for tsx and drizzle-kit) and unrs-resolver (for eslint-config-next) are allowed there already, so add any new dependency that needs a postinstall step too.
 
-Environment variables live in `.env` (template: `.env.example`): `DATABASE_URL` (local Postgres), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and `NEXT_PUBLIC_APP_URL`. `drizzle.config.ts` reads them with `dotenv/config`, and Next.js loads them itself.
+Environment variables live in `.env` (template: `.env.example`): `DATABASE_URL` (local Postgres), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. `drizzle.config.ts` reads them with `dotenv/config`, and Next.js loads them itself.
 
 ## Architecture
 
@@ -67,5 +68,19 @@ Stack: App Router under `src/app`, TypeScript with the `@/*` → `src/*` path al
 - The shopping bag is a cookie (`atelier_bag`, e.g. `12:2,15:1`) that holds product IDs and quantities **only**. There's no table yet, and guests and signed-in customers share the same mechanism.
 - Prices, names and stock are always read live through `getBagProducts()` in `lib/products.ts`, never from the client. `lib/bag-server.ts` (`server-only`) owns cookie reads and writes and `getBag()`. `lib/bag.ts` is client-safe (types, parsing, `subtotalCents`).
 - `app/bag/actions.ts` (`addToBag`, `updateBagQuantity`, `removeFromBag`) validates every argument and clamps quantities to live stock. `/bag` displays `min(quantity, stock)` and flags the difference, because it can't rewrite the cookie during render.
-- The bag doesn't reserve stock. Checkout must re-check stock and decrement it in a transaction.
+- The bag doesn't reserve stock. Checkout re-checks stock and reserves it in a transaction (see Checkout).
 - The header count comes from `BagLink`, which reads the cookie in the browser so `SiteHeader` stays static. Client bag controls go through `useBagAction`, which dispatches the `bag-change` event that `BagLink` listens for.
+
+**Checkout (`src/lib/orders.ts`, `src/lib/checkout.ts`, `src/app/checkout/`, `src/app/api/webhooks/stripe/`)**
+- Stripe-hosted Checkout (Checkout Sessions, inline `price_data`). There's no Stripe product catalog: names and prices come from Postgres, and the design is in `docs/plans/2026-10-06-stripe-checkout.md`.
+- `lib/orders.ts` (`server-only`) owns everything that touches orders or Stripe. `lib/checkout.ts` is client-safe (types, `decideTransition`, line building). `lib/stripe.ts` creates the client lazily, so `next build` needs no key.
+- `startCheckout` takes no arguments. It locks the `product_stock` rows (in product ID order), clamps the bag to stock, decrements stock and inserts a `pending` order with price snapshots in one transaction. Then it creates the session (idempotency key `checkout-<orderId>`, 31-minute expiry) and redirects. If creating the session fails, the order is marked `failed` and its stock released.
+- Stock is **reserved** while an order is `pending`/`processing`. `releaseOrder` returns it once (guarded by `stock_released_at`) on expiry, async failure, cancel or a new checkout from the same browser (`atelier_checkout` httpOnly cookie).
+- Only Stripe moves an order to `paid`: the signed webhook, or the success page / `orders:reconcile` retrieving the session server-side. All three go through `applyCheckoutSession`, which locks the order and checks `amount_total`/currency (a mismatch means `needs_review`). Never mark an order paid from anything the browser sends.
+- The webhook records `stripe_events.id` in the same transaction as the order change (duplicates are skipped). Errors return 500 so Stripe retries.
+- Local webhooks: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`. Env: `STRIPE_SECRET_KEY` (sandbox restricted key) and `STRIPE_WEBHOOK_SECRET`.
+- Scripts that import `server-only` modules run with `tsx --conditions=react-server` (see `orders:reconcile`).
+
+## Docs
+
+- Saved plans live in `docs/plans/`. Check there before planning or changing related features.

@@ -15,7 +15,8 @@
     "auth:generate": "pnpm dlx auth@latest generate --config src/lib/auth.ts --output src/db/auth-schema.ts --yes && tsx src/db/patch-auth-schema.ts",
     "auth:make-admin": "tsx src/db/make-admin.ts",
     "typecheck": "tsc --noEmit",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "orders:reconcile": "tsx --conditions=react-server src/db/reconcile-orders.ts"
   },
   "dependencies": {
     "better-auth": "^1.7.6",
@@ -23,7 +24,9 @@
     "next": "16.3.6",
     "pg": "^8.23.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1",
+    "stripe": "^22.6.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
