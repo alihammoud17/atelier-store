@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { OrderHistory } from "@/components/account/order-history";
 import { SignOutButton } from "@/components/auth/sign-out-button";
-import { Eyebrow, Heading, Text, TextLink } from "@/components/ui";
+import { Eyebrow, Heading, TextLink } from "@/components/ui";
+import { getCustomerOrders } from "@/lib/orders";
 import { requireSession } from "@/lib/session";
 
 export const metadata: Metadata = {
@@ -10,6 +12,7 @@ export const metadata: Metadata = {
 
 export default async function AccountPage() {
   const { user } = await requireSession("/account");
+  const orders = await getCustomerOrders(user.id);
 
   return (
     <main id="main" className="flex-1">
@@ -32,15 +35,16 @@ export default async function AccountPage() {
           </div>
         </dl>
 
+        <div className="mt-12">
+          <OrderHistory orders={orders} />
+        </div>
+
         <div className="mt-12 flex flex-wrap items-center gap-6 border-t border-line pt-8">
           <SignOutButton />
           {user.role === "admin" && (
             <TextLink href="/admin">Go to admin</TextLink>
           )}
         </div>
-        <Text size="sm" tone="muted" className="mt-6">
-          Orders and saved addresses will appear here.
-        </Text>
       </section>
     </main>
   );

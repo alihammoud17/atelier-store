@@ -80,6 +80,7 @@ Stack: App Router under `src/app`, TypeScript with the `@/*` → `src/*` path al
 - The webhook records `stripe_events.id` in the same transaction as the order change (duplicates are skipped). Errors return 500 so Stripe retries.
 - Local webhooks: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`. Env: `STRIPE_SECRET_KEY` (sandbox restricted key) and `STRIPE_WEBHOOK_SECRET`.
 - Scripts that import `server-only` modules run with `tsx --conditions=react-server` (see `orders:reconcile`).
+- Order history (`/account`, `/account/orders/[orderId]`) only reads through `getCustomerOrders`/`getCustomerOrder`, which filter by `user_id` in SQL. Another customer's order is a 404. Only placed orders are listed (`paid`, `processing`, `needs_review`, and `failed` with a payment intent); open or abandoned checkouts aren't orders.
 
 ## Docs
 

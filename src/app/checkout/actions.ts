@@ -38,18 +38,24 @@ export async function startCheckout(): Promise<CheckoutActionState> {
     }
   }
 
-  const reservation = await reserveOrder({
-    bag,
-    userId: session?.user.id ?? null,
-    email: session?.user.email ?? null,
-  });
+  let reservation: Awaited<ReturnType<typeof reserveOrder>>;
+  try {
+    reservation = await reserveOrder({
+      bag,
+      userId: session?.user.id ?? null,
+      email: session?.user.email ?? null,
+    });
+  } catch (error) {
+    console.error("Couldn't reserve stock for checkout", error);
+    return { message: "We couldn't start checkout. Nothing has been charged. Please try again." };
+  }
   if (!reservation.ok) {
-    return {
-      message:
-        reservation.reason === "empty"
-          ? "The pieces in your bag have just sold out."
-          : "Your order is below the minimum we can charge.",
-    };
+    return reservation.reason === "empty"
+      ? {
+          message: "The pieces in your bag have just sold out, so there's nothing to check out.",
+          refresh: true,
+        }
+      : { message: "Your order is below the minimum amount we can charge." };
   }
 
   let url: string;
@@ -58,7 +64,9 @@ export async function startCheckout(): Promise<CheckoutActionState> {
   } catch (error) {
     console.error(`Couldn't create a Checkout Session for order ${reservation.orderId}`, error);
     await failOrder(reservation.orderId);
-    return { message: "We couldn't start checkout. Please try again." };
+    return {
+      message: "We couldn't reach our payment provider. Nothing has been charged. Please try again.",
+    };
   }
 
   store.set(CHECKOUT_COOKIE, reservation.orderId, {

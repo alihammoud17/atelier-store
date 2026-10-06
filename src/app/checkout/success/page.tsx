@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { ClearBagOnSuccess } from "@/components/checkout/clear-bag-on-success";
+import { PaymentStatusPoller } from "@/components/checkout/payment-status-poller";
 import { ButtonLink, Eyebrow, Heading, Text } from "@/components/ui";
 import { formatPrice } from "@/lib/catalog";
 import { isCheckoutSessionId, type OrderStatus, orderReference } from "@/lib/checkout";
@@ -25,7 +26,7 @@ const copy: Record<OrderStatus, { eyebrow: string; title: string; body: string }
   pending: {
     eyebrow: "Confirming payment",
     title: "We’re confirming your payment",
-    body: "This usually takes a few seconds. Refresh this page to check again.",
+    body: "This usually takes a few seconds. You can stay on this page; it updates on its own.",
   },
   needs_review: {
     eyebrow: "Under review",
@@ -111,10 +112,7 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps<"/
       )}
 
       {order.status === "pending" ? (
-        <Actions
-          primary={{ href: `/checkout/success?session_id=${sessionId}`, label: "Refresh" }}
-          secondary={{ href: "/bag", label: "Return to bag" }}
-        />
+        <PaymentStatusPoller />
       ) : placed ? (
         <Actions primary={{ href: "/", label: "Continue shopping" }} />
       ) : (

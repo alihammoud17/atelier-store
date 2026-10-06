@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { BagLineItem } from "@/components/bag/bag-line-item";
 import { CheckoutButton } from "@/components/checkout/checkout-button";
+import { OpenCheckoutPanel } from "@/components/checkout/open-checkout-panel";
 import { ButtonLink, Eyebrow, Heading, Text } from "@/components/ui";
 import { BagIcon } from "@/components/ui/icons";
 import { countItems } from "@/lib/bag";
 import { getBag } from "@/lib/bag-server";
 import { formatPrice } from "@/lib/catalog";
+import { CHECKOUT_COOKIE } from "@/lib/checkout";
+import { getOpenCheckout } from "@/lib/orders";
 
 export const metadata: Metadata = {
   title: "Your bag",
@@ -16,8 +20,13 @@ export const metadata: Metadata = {
 // Reads the bag cookie, so this page renders per request with live prices and stock.
 export default async function BagPage({ searchParams }: PageProps<"/bag">) {
   const { checkout } = await searchParams;
-  const cancelled = checkout === "cancelled";
-  const { items, subtotalCents } = await getBag();
+  const store = await cookies();
+  const [{ items, subtotalCents }, openCheckout] = await Promise.all([
+    getBag(),
+    getOpenCheckout(store.get(CHECKOUT_COOKIE)?.value),
+  ]);
+  const cancelled = checkout === "cancelled" && !openCheckout;
+  const cancelFailed = checkout === "cancel-failed";
   const itemCount = countItems(items);
   const hasAdjustments = items.some((item) => item.quantity < item.requested);
   const hasSoldOut = items.some((item) => item.stock <= 0);
@@ -57,8 +66,16 @@ export default async function BagPage({ searchParams }: PageProps<"/bag">) {
             it.
           </p>
         )}
+        {cancelFailed && (
+          <p role="alert" className="mb-6 border border-danger px-4 py-3 text-sm text-danger">
+            We couldn&rsquo;t cancel your checkout just now. It ends on its own within 30 minutes,
+            and you won&rsquo;t be charged unless you complete payment.
+          </p>
+        )}
 
-        {items.length === 0 ? (
+        {openCheckout ? (
+          <OpenCheckoutPanel checkout={openCheckout} />
+        ) : items.length === 0 ? (
           <div className="flex flex-col items-center gap-5 border border-line px-6 py-16 text-center md:py-24">
             <BagIcon className="text-2xl" />
             <Heading as="h2" size="2xl">

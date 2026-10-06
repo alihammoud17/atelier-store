@@ -159,4 +159,25 @@ export function orderReference(orderId: string) {
 }
 
 /** Result of `startCheckout`, shaped for `useActionState`. It only returns on failure. */
-export type CheckoutActionState = { message: string } | null;
+export type CheckoutActionState = {
+  message: string;
+  /** The bag changed underneath the shopper (e.g. sold out), so the page should re-render. */
+  refresh?: boolean;
+} | null;
+
+/** Order dates are shown in the store's time zone, so server and browser agree. */
+export const STORE_TIME_ZONE = "America/New_York";
+
+export function formatOrderDate(date: Date) {
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: STORE_TIME_ZONE }).format(date);
+}
+
+/** Customer-facing payment status for a placed order. */
+export const orderStatusLabels: Record<OrderStatus, string> = {
+  paid: "Paid",
+  processing: "Payment processing",
+  needs_review: "Under review",
+  failed: "Payment failed",
+  pending: "Awaiting payment",
+  expired: "Not completed",
+};
