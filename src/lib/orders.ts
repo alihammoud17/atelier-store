@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import { db } from "@/db";
 import {
@@ -227,30 +227,76 @@ export async function failOrder(orderId: string) {
 /**
  * Ends this browser's earlier checkout so its reservation doesn't block a new one or linger
  * after a cancel. Stripe is asked first: if the session was paid in the meantime, the order
- * follows Stripe instead of being released.
+ * follows Stripe instead of being released. Returns where the order ended up.
  */
-export async function abandonCheckout(orderId: string) {
-  if (!isOrderId(orderId)) return;
+export async function abandonCheckout(
+  orderId: string,
+): Promise<{ status: OrderStatus; sessionId: string | null } | undefined> {
+  if (!isOrderId(orderId)) return undefined;
   const [order] = await db
     .select({ status: orders.status, sessionId: orders.stripeCheckoutSessionId })
     .from(orders)
     .where(eq(orders.id, orderId));
-  if (!order || order.status !== "pending") return;
+  if (!order) return undefined;
+  if (order.status !== "pending") return order;
 
   if (!order.sessionId) {
     await failOrder(orderId);
-    return;
+  } else {
+    const stripe = getStripe();
+    let session: Stripe.Checkout.Session;
+    try {
+      session = await stripe.checkout.sessions.expire(order.sessionId);
+    } catch {
+      // Already complete or expired: apply whatever state Stripe reports.
+      session = await stripe.checkout.sessions.retrieve(order.sessionId);
+    }
+    await db.transaction((tx) => applyCheckoutSession(tx, session));
   }
 
-  const stripe = getStripe();
-  let session: Stripe.Checkout.Session;
+  const status = await getOrderStatus(orderId);
+  return status ? { status, sessionId: order.sessionId } : undefined;
+}
+
+export type OpenCheckout = {
+  orderId: string;
+  /** Stripe's hosted page, or null when Stripe couldn't be reached. */
+  url: string | null;
+  /** Whole minutes until Stripe expires the session and the hold is released. */
+  minutesLeft: number;
+  totalCents: number;
+  items: { id: number; productName: string; quantity: number }[];
+};
+
+/**
+ * This browser's checkout that is still waiting for payment, if any. Settles it first when
+ * Stripe already has a final answer (expired, paid), so only a genuinely open session is
+ * returned.
+ */
+export async function getOpenCheckout(orderId: string | undefined): Promise<OpenCheckout | null> {
+  if (!isOrderId(orderId)) return null;
+  const order = await db.query.orders.findFirst({
+    where: and(eq(orders.id, orderId), eq(orders.status, "pending")),
+    columns: { id: true, totalCents: true, createdAt: true, stripeCheckoutSessionId: true },
+    with: { items: { columns: { id: true, productName: true, quantity: true }, orderBy: asc(orderItems.id) } },
+  });
+  if (!order?.stripeCheckoutSessionId) return null;
+
+  let url: string | null = null;
+  let expiresAt = new Date(order.createdAt.getTime() + CHECKOUT_SESSION_TTL_SECONDS * 1000);
   try {
-    session = await stripe.checkout.sessions.expire(order.sessionId);
-  } catch {
-    // Already complete or expired: apply whatever state Stripe reports.
-    session = await stripe.checkout.sessions.retrieve(order.sessionId);
+    const session = await syncCheckoutSession(order.stripeCheckoutSessionId);
+    if (session?.status !== "open") return null;
+    url = session.url;
+    expiresAt = new Date(session.expires_at * 1000);
+  } catch (error) {
+    // Stripe unreachable: still show the hold, just without a way back to the payment page.
+    console.error(`Couldn't check Checkout Session for order ${orderId}`, error);
   }
-  await db.transaction((tx) => applyCheckoutSession(tx, session));
+  const minutesLeft = Math.ceil((expiresAt.getTime() - Date.now()) / 60_000);
+  if (minutesLeft <= 0) return null;
+
+  return { orderId: order.id, url, minutesLeft, totalCents: order.totalCents, items: order.items };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -430,4 +476,54 @@ export async function getStaleOrders(minutes: number) {
       ),
     )
     .orderBy(asc(orders.createdAt));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Customer order history
+
+/**
+ * Orders a customer placed: Stripe completed the checkout, whether payment then succeeded,
+ * is still settling, failed (async), or is under review. Open or abandoned checkouts aren't
+ * orders, and session-creation failures never reached Stripe (no payment intent).
+ */
+const placedOrder = or(
+  inArray(orders.status, ["paid", "processing", "needs_review"]),
+  and(eq(orders.status, "failed"), isNotNull(orders.stripePaymentIntentId)),
+);
+
+/** The signed-in customer's placed orders, newest first. Scoped by `userId` in SQL. */
+export async function getCustomerOrders(userId: string, limit = 100) {
+  return db.query.orders.findMany({
+    where: and(eq(orders.userId, userId), placedOrder),
+    columns: { id: true, status: true, totalCents: true, createdAt: true },
+    with: { items: { columns: { quantity: true } } },
+    orderBy: desc(orders.createdAt),
+    limit,
+  });
+}
+
+/** One of the customer's placed orders, or undefined when it isn't theirs (or doesn't exist). */
+export async function getCustomerOrder(userId: string, orderId: string) {
+  if (!isOrderId(orderId)) return undefined;
+  return db.query.orders.findFirst({
+    where: and(eq(orders.id, orderId), eq(orders.userId, userId), placedOrder),
+    columns: {
+      id: true,
+      status: true,
+      email: true,
+      subtotalCents: true,
+      totalCents: true,
+      shippingDetails: true,
+      createdAt: true,
+      updatedAt: true,
+      paidAt: true,
+    },
+    with: {
+      items: {
+        columns: { id: true, productName: true, unitPriceCents: true, quantity: true },
+        orderBy: asc(orderItems.id),
+        with: { product: { columns: { slug: true, imageSrc: true, imageAlt: true } } },
+      },
+    },
+  });
 }
