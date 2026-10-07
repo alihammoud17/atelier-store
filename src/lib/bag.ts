@@ -5,6 +5,8 @@ import type { Product } from "@/lib/catalog";
 
 export const BAG_COOKIE = "atelier_bag";
 export const MAX_BAG_LINES = 50;
+/** Largest quantity one cookie line can hold (4 digits); actions cap quantities here too. */
+export const MAX_LINE_QUANTITY = 9_999;
 /** Dispatched on `window` after a bag action resolves, so the header count can update. */
 export const BAG_CHANGE_EVENT = "bag-change";
 
@@ -40,7 +42,8 @@ export function parseBag(raw: string | undefined | null): BagLine[] {
     if (!match) continue;
     const productId = Number(match[1]);
     const quantity = Number(match[2]);
-    if (!isPositiveInt(productId) || !isPositiveInt(quantity) || seen.has(productId)) continue;
+    if (!isPositiveInt(productId) || !isPositiveInt(quantity) || quantity > MAX_LINE_QUANTITY) continue;
+    if (seen.has(productId)) continue;
     seen.add(productId);
     lines.push({ productId, quantity });
     if (lines.length === MAX_BAG_LINES) break;
