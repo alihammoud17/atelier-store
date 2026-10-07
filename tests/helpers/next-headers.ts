@@ -91,6 +91,10 @@ export const testCookies = {
   seed(values: Record<string, string>) {
     for (const [name, value] of Object.entries(values)) jar.set(name, { name, value, options: {} });
   },
+  /** Deletes one cookie, as an expired Set-Cookie would. */
+  remove(name: string) {
+    jar.delete(name);
+  },
   /** The cookie's current value, or undefined once it has been deleted. */
   value(name: string) {
     return jar.get(name)?.value;

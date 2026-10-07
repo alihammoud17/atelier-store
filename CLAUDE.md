@@ -99,7 +99,11 @@ Strategy and phases: `docs/plans/2026-10-06-testing-strategy.md`. New features s
   - `tests/e2e/`: Playwright (Phase 8).
   - `tests/helpers/`: setup files and shared helpers, never tests.
 - Integration tests take only `DATABASE_URL` from the environment: the shell (CI), otherwise `.env.test` (template: `.env.test.example`), **never `.env`**. It must name a database ending in `_test`, or the run refuses to start. Stripe, Better Auth and app-URL variables are fixed dummies in `vitest.config.mts` that override `.env.test` and the shell, so tests never use real keys. The global setup creates the database if it's missing and applies `./drizzle` migrations, so run `db:generate` before testing a schema change.
-- Every integration test starts with all tables truncated (identities restarted), empty cookies and unstubbed Stripe (`tests/helpers/setup-integration.ts`). Build data with `tests/helpers/factories.ts`; don't depend on the seed catalog.
+- Every integration test starts with all tables truncated (identities restarted), empty cookies and unstubbed Stripe (`tests/helpers/setup-integration.ts`). Build data with `tests/helpers/factories.ts`; don't depend on the seed catalog. Other helpers:
+  - `tests/helpers/auth.ts`: `signUpAndSignIn()` creates a real Better Auth session in the cookie jar (`role: "admin"` is granted in the DB).
+  - `tests/helpers/checkout.ts`: `createReservedOrder()` goes through the real `reserveOrder`.
+  - `tests/helpers/queries.ts`: read-backs for orders, stock and Stripe events.
+- CLI scripts in `src/db/` keep only argument parsing and logging, so their logic is testable: it lives in importable functions (`reconcileStaleOrders` in `lib/orders.ts`, `grantAdminRole` in `db/roles.ts`). Importing a script would load `.env` and close the shared pool.
 - Use a real Postgres, never a mocked Drizzle. Mock only at the boundaries, which the integration setup already does:
   - `next/headers` → `tests/helpers/next-headers.ts`: seed or inspect cookies with `testCookies`; `headers()` carries the jar as a `cookie` header.
   - `@/lib/stripe` → `tests/helpers/stripe.ts`: stub calls on `stripeMock` per test (unstubbed calls reject). Build sessions and events with `makeCheckoutSession`/`makeEvent`, and webhook requests with `signedWebhookRequest`, which uses real SDK signatures.
