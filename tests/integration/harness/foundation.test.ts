@@ -7,11 +7,11 @@ import { describe, expect, test } from "vitest";
 import { db } from "@/db";
 import { orderItems, products, productStock } from "@/db/schema";
 import { getStripe } from "@/lib/stripe";
-import { assertTestDatabaseUrl } from "./env";
-import { createOrder, createProduct, createUser } from "./factories";
-import { expectNotFound, expectRedirect } from "./navigation";
-import { testCookies } from "./next-headers";
-import { invalidRequestError, makeCheckoutSession, makeEvent, signedWebhookRequest, stripeMock } from "./stripe";
+import { assertTestDatabaseUrl } from "@tests/helpers/env";
+import { createOrder, createProduct, createUser } from "@tests/helpers/factories";
+import { expectNotFound, expectRedirect } from "@tests/helpers/navigation";
+import { testCookies } from "@tests/helpers/next-headers";
+import { invalidRequestError, makeCheckoutSession, makeEvent, signedWebhookRequest, stripeMock } from "@tests/helpers/stripe";
 
 describe("test database", () => {
   test("only accepts databases whose name ends in _test", () => {

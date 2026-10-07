@@ -4,13 +4,14 @@ import { parse } from "dotenv";
 import { defineConfig } from "vitest/config";
 
 // Test layers (docs/plans/2026-10-06-testing-strategy.md):
-// - unit:        *.test.ts      pure, client-safe helpers; no database
-// - integration: *.int.test.ts  real Postgres test database, run one file at a time
-// - component:   *.test.tsx     client components in jsdom
+// - unit:        tests/unit/**/*.test.ts         pure, client-safe helpers; no database
+// - component:   tests/unit/**/*.test.tsx        client components in jsdom
+// - integration: tests/integration/**/*.test.ts  real Postgres test database, one file at a time
+// - e2e:         tests/e2e (Playwright, not Vitest)
 //
 // Integration tests take only DATABASE_URL from the environment (the shell, else `.env.test`)
 // and never read `.env`, so they can't touch the development database. Same rule as
-// src/test/env.ts, which the global setup uses.
+// tests/helpers/env.ts, which the global setup uses.
 const envFile = fileURLToPath(new URL(".env.test", import.meta.url));
 const databaseUrl =
   process.env.DATABASE_URL ?? (existsSync(envFile) ? parse(readFileSync(envFile)).DATABASE_URL : undefined);
@@ -31,14 +32,14 @@ export default defineConfig({
     tsconfigPaths: true,
     alias: {
       // The real package throws outside React Server Components; tests import server modules directly.
-      "server-only": fileURLToPath(new URL("src/test/server-only.ts", import.meta.url)),
+      "server-only": fileURLToPath(new URL("tests/helpers/server-only.ts", import.meta.url)),
     },
   },
   test: {
     coverage: {
       provider: "v8",
       include: ["src/lib/**", "src/app/**/actions.ts", "src/app/**/route.ts", "src/proxy.ts"],
-      exclude: ["**/*.test.*", "src/test/**"],
+      exclude: ["**/*.test.*"],
     },
     projects: [
       {
@@ -46,8 +47,7 @@ export default defineConfig({
         test: {
           name: "unit",
           environment: "node",
-          include: ["src/**/*.test.ts"],
-          exclude: ["src/**/*.int.test.ts"],
+          include: ["tests/unit/**/*.test.ts"],
         },
       },
       {
@@ -55,10 +55,10 @@ export default defineConfig({
         test: {
           name: "integration",
           environment: "node",
-          include: ["src/**/*.int.test.ts"],
+          include: ["tests/integration/**/*.test.ts"],
           env: integrationEnv,
-          globalSetup: ["src/test/global-setup.ts"],
-          setupFiles: ["src/test/setup-integration.ts"],
+          globalSetup: ["tests/helpers/global-setup.ts"],
+          setupFiles: ["tests/helpers/setup-integration.ts"],
           // Every file shares one database, so files run one after another.
           fileParallelism: false,
           testTimeout: 15_000,
@@ -70,8 +70,8 @@ export default defineConfig({
         test: {
           name: "component",
           environment: "jsdom",
-          include: ["src/**/*.test.tsx"],
-          setupFiles: ["src/test/setup-component.ts"],
+          include: ["tests/unit/**/*.test.tsx"],
+          setupFiles: ["tests/helpers/setup-component.ts"],
         },
       },
     ],
