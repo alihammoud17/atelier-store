@@ -4,6 +4,7 @@ import { test } from "vitest";
 import {
   BAG_COOKIE,
   MAX_BAG_LINES,
+  MAX_LINE_QUANTITY,
   countItems,
   parseBag,
   readBagCookie,
@@ -54,4 +55,9 @@ test("readBagCookie finds and decodes the bag among other cookies", () => {
   assert.equal(readBagCookie(header), "12:2,3:1");
   assert.equal(readBagCookie("theme=light"), "");
   assert.equal(readBagCookie(`${BAG_COOKIE}=%E0%A4%A`), "");
+});
+
+test("parseBag keeps quantities up to MAX_LINE_QUANTITY and drops larger ones", () => {
+  assert.equal(MAX_LINE_QUANTITY, 9_999);
+  assert.deepEqual(parseBag(`1:${MAX_LINE_QUANTITY},2:${MAX_LINE_QUANTITY + 1}`), [{ productId: 1, quantity: MAX_LINE_QUANTITY }]);
 });
