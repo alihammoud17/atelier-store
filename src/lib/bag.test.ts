@@ -1,6 +1,6 @@
-// Run with: pnpm exec tsx --test src/lib/bag.test.ts
+// Run with: pnpm test (or pnpm exec vitest run src/lib/bag.test.ts)
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import {
   BAG_COOKIE,
   MAX_BAG_LINES,
