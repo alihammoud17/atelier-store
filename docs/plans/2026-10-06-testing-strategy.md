@@ -3,7 +3,7 @@
 - **Date:** 2026-10-06
 - **Branch:** main
 - **Goal:** Build a test foundation (Vitest unit/integration/component and Playwright E2E), then add coverage one feature at a time, highest-risk areas first.
-- **Status:** in-progress (Phases 0–2 merged; Phase 3 on branch `test/phase-3-bag`)
+- **Status:** in-progress (Phases 0–3 merged; Phases 4–7 on branch `test/phases-4-7`; next: Phase 8)
 - **Approval:** approved in plan mode
 
 ## Context
@@ -56,27 +56,27 @@ Principles:
 - [x] `removeFromBag`: removes the line, and invalid input leaves the cookie unchanged.
 
 ### Phase 4: Checkout and orders (integration, highest risk)
-- [ ] `reserveOrder`: decrements stock, snapshots names and prices, ignores client-side prices; handles `empty` and `below_minimum`; **concurrency**: two parallel reservations for a product with stock 1 produce exactly one order.
-- [ ] `releaseOrder`: returns stock exactly once (a second call is a no-op), skips items whose product was deleted, and only acts on `pending`/`processing`.
-- [ ] `applyCheckoutSession`: covers each transition's writes (`paid` sets `paidAt`, payment intent, email coalesce and shipping; `processing`; `release`; `needs_review`), plus `unknown_order` and `session_mismatch`. The DB check constraints stay satisfied.
-- [ ] `processStripeEvent`: ignores non-checkout events; a duplicate event ID returns `duplicate`; an error inside the transaction leaves no `stripe_events` row.
-- [ ] Stripe-backed functions (stubbed): `createCheckoutSession` (payload built from DB lines, idempotency key, session ID stored), `abandonCheckout` (no session → failed; `expire` throws → `retrieve` and apply), `syncCheckoutSession` (invalid ID or `StripeInvalidRequestError` → null), `getOpenCheckout` (only open, unexpired sessions; works when Stripe is unreachable).
-- [ ] `startCheckout` action: empty bag; abandons the previous checkout from the cookie; reservation errors; a Stripe create failure → `failOrder` and stock restored; success sets the httpOnly checkout cookie and redirects. `completeCheckout`: only clears the bag when the cookie matches a `paid` order.
-- [ ] Webhook `POST` route: missing secret → 500, missing or invalid signature → 400 with no DB change, a valid signed event → applied, a processing error → 500.
-- [ ] Cancel `GET` route: cookie mismatch → bag, paid in another tab → success page, normal cancel → stock released and cookie deleted.
-- [ ] `getStaleOrders` age cut-off (backdate `createdAt`) and the reconcile flow (no session → released).
+- [x] `reserveOrder`: decrements stock, snapshots names and prices, ignores client-side prices; handles `empty` and `below_minimum`; **concurrency**: two parallel reservations for a product with stock 1 produce exactly one order.
+- [x] `releaseOrder`: returns stock exactly once (a second call is a no-op), skips items whose product was deleted, and only acts on `pending`/`processing`.
+- [x] `applyCheckoutSession`: covers each transition's writes (`paid` sets `paidAt`, payment intent, email coalesce and shipping; `processing`; `release`; `needs_review`), plus `unknown_order` and `session_mismatch`. The DB check constraints stay satisfied.
+- [x] `processStripeEvent`: ignores non-checkout events; a duplicate event ID returns `duplicate`; an error inside the transaction leaves no `stripe_events` row.
+- [x] Stripe-backed functions (stubbed): `createCheckoutSession` (payload built from DB lines, idempotency key, session ID stored), `abandonCheckout` (no session → failed; `expire` throws → `retrieve` and apply), `syncCheckoutSession` (invalid ID or `StripeInvalidRequestError` → null), `getOpenCheckout` (only open, unexpired sessions; works when Stripe is unreachable).
+- [x] `startCheckout` action: empty bag; abandons the previous checkout from the cookie; reservation errors; a Stripe create failure → `failOrder` and stock restored; success sets the httpOnly checkout cookie and redirects. `completeCheckout`: only clears the bag when the cookie matches a `paid` order.
+- [x] Webhook `POST` route: missing secret → 500, missing or invalid signature → 400 with no DB change, a valid signed event → applied, a processing error → 500.
+- [x] Cancel `GET` route: cookie mismatch → bag, paid in another tab → success page, normal cancel → stock released and cookie deleted.
+- [x] `getStaleOrders` age cut-off (backdate `createdAt`) and the reconcile flow (no session → released).
 
 ### Phase 5: Auth and access control (integration)
-- [ ] `proxy.ts`: redirects to `/sign-in?next=<path+search>` without a session cookie and passes through with one (build a `NextRequest` directly).
-- [ ] `session.ts` (with `auth.api.getSession` mocked): `requireSession` redirects with an encoded `next`; `requireAdmin` redirects anonymous users, calls `notFound()` for customers, and passes admins with `disableCookieCache`.
-- [ ] Better Auth against the test DB: sign up and sign in via `auth.api`; `role` defaults to `customer` and can't be set through sign-up input; the `make-admin` logic grants admin.
+- [x] `proxy.ts`: redirects to `/sign-in?next=<path+search>` without a session cookie and passes through with one (build a `NextRequest` directly).
+- [x] `session.ts` (with `auth.api.getSession` mocked): `requireSession` redirects with an encoded `next`; `requireAdmin` redirects anonymous users, calls `notFound()` for customers, and passes admins with `disableCookieCache`.
+- [x] Better Auth against the test DB: sign up and sign in via `auth.api`; `role` defaults to `customer` and can't be set through sign-up input; the `make-admin` logic grants admin.
 
 ### Phase 6: Order history (integration)
-- [ ] `getCustomerOrders`: scoped to the user, placed orders only (excludes `pending`, `expired`, and `failed` without a payment intent), newest first, respects `limit`.
-- [ ] `getCustomerOrder`: another user's order, an invalid ID or a non-placed order → undefined; items include product slug and image, and a deleted product still shows its snapshot.
+- [x] `getCustomerOrders`: scoped to the user, placed orders only (excludes `pending`, `expired`, and `failed` without a payment intent), newest first, respects `limit`.
+- [x] `getCustomerOrder`: another user's order, an invalid ID or a non-placed order → undefined; items include product slug and image, and a deleted product still shows its snapshot.
 
 ### Phase 7: Client components with logic (component)
-- [ ] `BagLink` (count from the cookie, updates on the `bag-change` event), `useBagAction` (dispatches the event), `QuantityStepper` bounds, `AuthForm` (errors and `safeNext` redirect), `PaymentStatusPoller` (stops on a final status, using fake timers).
+- [x] `BagLink` (count from the cookie, updates on the `bag-change` event), `useBagAction` (dispatches the event), `QuantityStepper` bounds, `AuthForm` (errors and `safeNext` redirect), `PaymentStatusPoller` (stops on a final status, using fake timers).
 
 ### Phase 8: E2E (Playwright)
 - [ ] `playwright.config.ts`: `webServer` runs build + start against the test DB (seeded with `db:seed`), Chromium only to start.
@@ -132,3 +132,11 @@ Principles:
 - **2026-10-08, Phase 3** (branch `test/phase-3-bag`): `tests/integration/lib/bag-server.test.ts` (readBag, writeBag cookie options, getBag clamping and ordering) and `tests/integration/app/bag/actions.test.ts` (every action, with a table of invalid inputs a client could send). Two bugs found and fixed:
   - **Form strings were parsed with `Number()`.** `updateBagQuantity(id, "")` turned `""` into 0, deleted the line and reported "Removed from your bag." `" 2"`, `"1e3"` and `"0x10"` were also accepted. The actions now accept only plain digit strings. The UI only sends numbers, so this was reachable only through crafted requests, which affect nothing but the caller's own bag.
   - **Quantities the cookie can't hold.** Cookie lines store at most 4 digits, but the actions only clamped to stock. With 10,000+ in stock, setting quantity 20,000 reported success and wrote `id:20000`, which `parseBag` then dropped, so the line vanished. A new `MAX_LINE_QUANTITY` (9,999) in `lib/bag.ts` is used by `parseBag` and by the actions, which now cap at `min(stock, MAX_LINE_QUANTITY)`.
+- **2026-10-08, Phases 4–7** (branch `test/phases-4-7`): 131 new tests. No application bugs found.
+  - **Phase 4, checkout and orders** (77 tests): `tests/integration/lib/orders/` (`reservation`, `apply-session`, `stripe-sessions`, `reconcile`) plus the checkout actions, the cancel route and the Stripe webhook route under `tests/integration/app/`. Covers concurrent reservations (the last piece, and bags listing products in opposite orders), rollback on an integer-overflow insert, every session transition and the `orders_paid_or_released_check`, webhook signature/tamper/missing-secret handling, and rollback on processing errors.
+  - **Phase 5, auth and access** (19 tests): `proxy.test.ts`, `lib/session.test.ts`, `lib/auth.test.ts`, `db/roles.test.ts`. Instead of mocking `auth.api.getSession` as planned, the tests use **real Better Auth sessions** via `tests/helpers/auth.ts` (`signUpAndSignIn`). This also checks that `requireAdmin` bypasses the 5-minute cookie cache. Better Auth's `nextCookies()` doesn't write to the test cookie jar, so the helper copies Set-Cookie headers in itself.
+  - **Phase 6, order history** (8 tests): `lib/orders/history.test.ts`.
+  - **Phase 7, components** (27 tests): `tests/unit/components/` for `BagLink`, `useBagAction`, `QuantityStepper`, `AuthForm` and `PaymentStatusPoller`. The poller doesn't know the order status itself: the success page stops rendering it once the status is final. So the tests cover the 2 s interval, giving up after 15 attempts, "Check again", and stopping on unmount.
+  - **Refactors for testability** (no behaviour change): the loop in `pnpm orders:reconcile` moved into `reconcileStaleOrders()` in `lib/orders.ts`, and `pnpm auth:make-admin` now calls `grantAdminRole()` in a new `src/db/roles.ts`. The scripts kept only their CLI parts, because importing them would load `.env` and close the shared pool.
+  - **New helpers:** `tests/helpers/auth.ts`, `tests/helpers/checkout.ts` (`createReservedOrder` via the real `reserveOrder`), `tests/helpers/queries.ts`, and `testCookies.remove()`.
+  - **Mutation checks:** removing the stock row lock, the `user_id` filter in `getCustomerOrder`, or `disableCookieCache` in `requireAdmin` each make a test fail.
