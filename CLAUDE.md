@@ -23,9 +23,16 @@ pnpm db:seed      # upsert the starter catalog from src/db/seed-data.ts (resets 
 pnpm auth:generate  # regenerate src/db/auth-schema.ts from the Better Auth config (+ timestamptz patch)
 pnpm auth:make-admin <email>  # give an existing user the admin role
 pnpm orders:reconcile  # settle pending/processing orders older than 35 min from Stripe (missed webhooks)
+
+pnpm test           # Vitest unit + component tests (no database)
+pnpm test:int       # Vitest integration tests against the Postgres test database
+pnpm test:all       # all Vitest projects
+pnpm test:watch     # unit + component in watch mode
+pnpm test:coverage  # all projects with v8 coverage
+pnpm test:e2e       # Playwright (configured in a later phase)
 ```
 
-No test framework is set up yet. Pure helpers can have `node:test` files run through the existing tsx, e.g. `pnpm exec tsx --test src/lib/bag.test.ts`.
+See Testing below.
 
 The package manager is pnpm, pinned through `packageManager` in `package.json`. Use `pnpm dlx` instead of `npx`. pnpm skips dependency build scripts unless they're allowed under `allowBuilds` in `pnpm-workspace.yaml`. esbuild (for tsx and drizzle-kit) and unrs-resolver (for eslint-config-next) are allowed there already, so add any new dependency that needs a postinstall step too.
 
@@ -81,6 +88,19 @@ Stack: App Router under `src/app`, TypeScript with the `@/*` → `src/*` path al
 - Local webhooks: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`. Env: `STRIPE_SECRET_KEY` (sandbox restricted key) and `STRIPE_WEBHOOK_SECRET`.
 - Scripts that import `server-only` modules run with `tsx --conditions=react-server` (see `orders:reconcile`).
 - Order history (`/account`, `/account/orders/[orderId]`) only reads through `getCustomerOrders`/`getCustomerOrder`, which filter by `user_id` in SQL. Another customer's order is a 404. Only placed orders are listed (`paid`, `processing`, `needs_review`, and `failed` with a payment intent); open or abandoned checkouts aren't orders.
+
+## Testing
+
+Strategy and phases: `docs/plans/2026-10-06-testing-strategy.md`. New features ship with tests.
+
+- Vitest projects in `vitest.config.mts`. **unit** is `*.test.ts` (pure, client-safe helpers, no DB). **integration** is `*.int.test.ts` (real Postgres, one file at a time). **component** is `*.test.tsx` (jsdom + Testing Library, only for client components with logic). Test files sit next to their source. Playwright E2E lives in `e2e/`.
+- Integration tests take only `DATABASE_URL` from the environment: the shell (CI), otherwise `.env.test` (template: `.env.test.example`), **never `.env`**. It must name a database ending in `_test`, or the run refuses to start. Stripe, Better Auth and app-URL variables are fixed dummies in `vitest.config.mts` that override `.env.test` and the shell, so tests never use real keys. The global setup creates the database if it's missing and applies `./drizzle` migrations, so run `db:generate` before testing a schema change.
+- Every integration test starts with all tables truncated (identities restarted), empty cookies and unstubbed Stripe (`src/test/setup-integration.ts`). Build data with `src/test/factories.ts`; don't depend on the seed catalog.
+- Use a real Postgres, never a mocked Drizzle. Mock only at the boundaries, which the integration setup already does:
+  - `next/headers` → `src/test/next-headers.ts`: seed or inspect cookies with `testCookies`; `headers()` carries the jar as a `cookie` header.
+  - `@/lib/stripe` → `src/test/stripe.ts`: stub calls on `stripeMock` per test (unstubbed calls reject). Build sessions and events with `makeCheckoutSession`/`makeEvent`, and webhook requests with `signedWebhookRequest`, which uses real SDK signatures.
+  - Assert `redirect()`/`notFound()` with `expectRedirect`/`expectNotFound` from `src/test/navigation.ts`.
+- `server-only` is aliased to an empty module in tests, so server modules import directly.
 
 ## Docs
 

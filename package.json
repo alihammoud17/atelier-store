@@ -15,6 +15,12 @@
     "auth:generate": "pnpm dlx auth@latest generate --config src/lib/auth.ts --output src/db/auth-schema.ts --yes && tsx src/db/patch-auth-schema.ts",
     "auth:make-admin": "tsx src/db/make-admin.ts",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit --project component --passWithNoTests",
+    "test:int": "vitest run --project integration",
+    "test:all": "vitest run --passWithNoTests",
+    "test:watch": "vitest --project unit --project component --passWithNoTests",
+    "test:coverage": "vitest run --coverage --passWithNoTests",
+    "test:e2e": "playwright test",
     "db:seed": "tsx src/db/seed.ts",
     "orders:reconcile": "tsx --conditions=react-server src/db/reconcile-orders.ts"
   },
@@ -29,17 +35,23 @@
     "stripe": "^22.6.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^5.0.3",
     "dotenv": "^18.0.4",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "jsdom": "^30.1.2",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.0.3"
   }
 }

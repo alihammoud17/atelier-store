@@ -1,6 +1,6 @@
-// Run with: pnpm exec tsx --test src/lib/checkout.test.ts
+// Run with: pnpm test (or pnpm exec vitest run src/lib/checkout.test.ts)
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import {
   buildCheckoutLines,
   checkoutTotalCents,
