@@ -32,6 +32,13 @@ test("safeNext rejects paths that browsers turn into another origin", () => {
   }
 });
 
+test("safeNext rejects paths that normalize to a protocol-relative URL", () => {
+  // Same origin when resolved, but "//evil.com" is what the browser would be sent to.
+  for (const next of ["/.//evil.com", "/a/..//evil.com", "/%2e//evil.com"]) {
+    assert.equal(safeNext(next), "/account", next);
+  }
+});
+
 test("safeNext rejects relative paths, empty values and non-strings", () => {
   for (const next of ["account", "", " /account", "?next=/x", undefined, null, 42, ["/account"], { href: "/" }]) {
     assert.equal(safeNext(next), "/account", JSON.stringify(next));
