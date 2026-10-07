@@ -3,7 +3,7 @@
 - **Date:** 2026-10-06
 - **Branch:** main
 - **Goal:** Build a test foundation (Vitest unit/integration/component and Playwright E2E), then add coverage one feature at a time, highest-risk areas first.
-- **Status:** in-progress (Phase 0 merged; Phase 1 on branch `test/phase-1-pure-helpers`)
+- **Status:** in-progress (Phases 0–1 merged; Phase 2 on branch `test/phase-2-catalog-reads`)
 - **Approval:** approved in plan mode
 
 ## Context
@@ -45,9 +45,9 @@ Principles:
 - [x] `checkout.ts` gaps: `checkoutTotalCents`, `orderReference`, `formatOrderDate` in `STORE_TIME_ZONE` (around midnight UTC), `orderStatusLabels` completeness, and the `MIN_CHARGE_CENTS` constant behaviour.
 
 ### Phase 2: Catalog reads (integration, `lib/products.ts`)
-- [ ] `searchProducts`: case-insensitive matching on name, category and description; name matches rank first; `%` and `_` match literally; respects `limit`.
-- [ ] `getBagProducts`: returns nothing for an empty list, omits missing IDs, and uses stock 0 when there's no `product_stock` row.
-- [ ] `getProduct` (unknown slug → undefined, includes stock), `getRelatedProducts` (same category first, excludes the product itself), `getCategory`, `getCategoryProducts`, `getNewArrivals`, `getGiftEdit` and `getHomeCategories` (ordering and null-image filtering).
+- [x] `searchProducts`: case-insensitive matching on name, category and description; name matches rank first; `%` and `_` match literally; respects `limit`.
+- [x] `getBagProducts`: returns nothing for an empty list, omits missing IDs, and uses stock 0 when there's no `product_stock` row.
+- [x] `getProduct` (unknown slug → undefined, includes stock), `getRelatedProducts` (same category first, excludes the product itself), `getCategory`, `getCategoryProducts`, `getNewArrivals`, `getGiftEdit` and `getHomeCategories` (ordering and null-image filtering).
 
 ### Phase 3: Bag (integration, cookie mock + DB)
 - [ ] `bag-server.ts`: `writeBag` deletes the cookie when the bag is empty and otherwise sets the options (non-httpOnly, 30 days); `getBag` drops deleted products, clamps to `min(quantity, stock)` and keeps `requested`.
@@ -127,3 +127,5 @@ Principles:
   - **Bug found and fixed: open redirect in `safeNext`.** `/sign-in?next=/%09/evil.com` passed the check because the value starts with `/` and its second character is a tab. Browsers strip tabs and newlines when parsing URLs, so `window.location.assign` in `AuthForm` went to `https://evil.com/` after sign-in. `safeNext` now resolves the path with `URL` against a probe origin, rejects anything that leaves it, and returns the normalized path. The new `redirects.test.ts` is the regression test.
   - `formatPrice` rounds to whole dollars (e.g. 1999 → "$20"). Every seeded price is a whole dollar, so this is pinned by a test rather than changed.
   - `MIN_CHARGE_CENTS` is pinned at 50. How `reserveOrder` enforces it is covered in Phase 4.
+- **2026-10-08, Phase 1 follow-up:** after the merge, `safeNext` also rejects same-origin paths that normalize to `//…` (e.g. `/.//evil.com`, `/a/..//evil.com`), which the first fix would have returned as a protocol-relative URL (commit `49eb03d`). Phase 2 adds the regression test to `redirects.test.ts`.
+- **2026-10-08, Phase 2** (branch `test/phase-2-catalog-reads`): `tests/integration/lib/products.test.ts` has 19 tests covering every export of `lib/products.ts`, with fixed `createdAt` values so "newest first" is deterministic. No bugs found. Checked by breaking the code twice: removing the LIKE escaping and removing the name-first ranking each make the matching tests fail.
