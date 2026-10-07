@@ -12,7 +12,7 @@ export function safeNext(next: unknown, fallback = "/account") {
   } catch {
     return fallback;
   }
-  if (url.origin !== PROBE_ORIGIN) return fallback;
+  if (url.origin !== PROBE_ORIGIN || url.pathname.startsWith("//")) return fallback;
   // Return the normalized form, so the browser navigates to exactly what was checked.
   return url.pathname + url.search + url.hash;
 }
