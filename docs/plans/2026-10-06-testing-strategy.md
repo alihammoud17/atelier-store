@@ -40,9 +40,9 @@ Principles:
 - [x] Add a "Testing" section to `CLAUDE.md` covering the layers, commands, the test DB, the mock boundaries, and the rule that new features ship with tests.
 
 ### Phase 1: Pure helpers (unit)
-- [ ] `redirects.ts`, `safeNext`: same-origin paths pass; `//evil.com`, `/\evil.com`, absolute URLs and non-strings fall back.
-- [ ] `catalog.ts`: `formatPrice` (cents, no fractional digits) and `getStockStatus` boundaries (0, 1, 3, 4, negative).
-- [ ] `checkout.ts` gaps: `checkoutTotalCents`, `orderReference`, `formatOrderDate` in `STORE_TIME_ZONE` (around midnight UTC), `orderStatusLabels` completeness, and the `MIN_CHARGE_CENTS` constant behaviour.
+- [x] `redirects.ts`, `safeNext`: same-origin paths pass; `//evil.com`, `/\evil.com`, absolute URLs and non-strings fall back.
+- [x] `catalog.ts`: `formatPrice` (cents, no fractional digits) and `getStockStatus` boundaries (0, 1, 3, 4, negative).
+- [x] `checkout.ts` gaps: `checkoutTotalCents`, `orderReference`, `formatOrderDate` in `STORE_TIME_ZONE` (around midnight UTC), `orderStatusLabels` completeness, and the `MIN_CHARGE_CENTS` constant behaviour.
 
 ### Phase 2: Catalog reads (integration, `lib/products.ts`)
 - [ ] `searchProducts`: case-insensitive matching on name, category and description; name matches rank first; `%` and `_` match literally; respects `limit`.
@@ -123,3 +123,7 @@ Principles:
   - `.gitignore`: allows `.env.test.example` and ignores Playwright output folders.
 - **2026-10-07, test env:** `.env.test` only needs `DATABASE_URL`, and the shell value wins when set (CI). `vitest.config.mts` always forces dummy `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL`, overriding `.env.test` and the shell. A foundation test asserts this, after it caught real keys coming from a `.env.test` copied from `.env`.
 - **2026-10-07, test layout:** tests moved from next to their source into a top-level `tests/` folder, organized by scope. `tests/unit/` holds `*.test.ts` (unit project) and `*.test.tsx` (component project); `tests/integration/` and `tests/e2e/` hold the other scopes; helpers are in `tests/helpers/` (was `src/test/`). Inside each scope, paths mirror `src/`. The `.int.test.ts` suffix is gone because the folder sets the scope. Tests import helpers through a new `@tests/*` tsconfig alias. Earlier entries keep their original paths.
+- **2026-10-07, Phase 1** (branch `test/phase-1-pure-helpers`): tests in `tests/unit/lib/` for `redirects.test.ts`, `catalog.test.ts` and the `checkout.test.ts` gaps.
+  - **Bug found and fixed: open redirect in `safeNext`.** `/sign-in?next=/%09/evil.com` passed the check because the value starts with `/` and its second character is a tab. Browsers strip tabs and newlines when parsing URLs, so `window.location.assign` in `AuthForm` went to `https://evil.com/` after sign-in. `safeNext` now resolves the path with `URL` against a probe origin, rejects anything that leaves it, and returns the normalized path. The new `redirects.test.ts` is the regression test.
+  - `formatPrice` rounds to whole dollars (e.g. 1999 → "$20"). Every seeded price is a whole dollar, so this is pinned by a test rather than changed.
+  - `MIN_CHARGE_CENTS` is pinned at 50. How `reserveOrder` enforces it is covered in Phase 4.
