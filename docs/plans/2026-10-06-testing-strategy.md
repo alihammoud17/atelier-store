@@ -3,7 +3,7 @@
 - **Date:** 2026-10-06
 - **Branch:** main
 - **Goal:** Build a test foundation (Vitest unit/integration/component and Playwright E2E), then add coverage one feature at a time, highest-risk areas first.
-- **Status:** in-progress (Phases 0–1 merged; Phase 2 on branch `test/phase-2-catalog-reads`)
+- **Status:** in-progress (Phases 0–2 merged; Phase 3 on branch `test/phase-3-bag`)
 - **Approval:** approved in plan mode
 
 ## Context
@@ -50,10 +50,10 @@ Principles:
 - [x] `getProduct` (unknown slug → undefined, includes stock), `getRelatedProducts` (same category first, excludes the product itself), `getCategory`, `getCategoryProducts`, `getNewArrivals`, `getGiftEdit` and `getHomeCategories` (ordering and null-image filtering).
 
 ### Phase 3: Bag (integration, cookie mock + DB)
-- [ ] `bag-server.ts`: `writeBag` deletes the cookie when the bag is empty and otherwise sets the options (non-httpOnly, 30 days); `getBag` drops deleted products, clamps to `min(quantity, stock)` and keeps `requested`.
-- [ ] `addToBag`: rejects invalid IDs (string, float, negative, object), unknown and sold-out products; increments existing lines; fixes up a stale cookie above stock; enforces `MAX_BAG_LINES`.
-- [ ] `updateBagQuantity`: 0 removes the line; clamps to stock with an "Only N available" message; a sold-out product is removed; an invalid quantity or missing line is rejected.
-- [ ] `removeFromBag`: removes the line, and invalid input leaves the cookie unchanged.
+- [x] `bag-server.ts`: `writeBag` deletes the cookie when the bag is empty and otherwise sets the options (non-httpOnly, 30 days); `getBag` drops deleted products, clamps to `min(quantity, stock)` and keeps `requested`.
+- [x] `addToBag`: rejects invalid IDs (string, float, negative, object), unknown and sold-out products; increments existing lines; fixes up a stale cookie above stock; enforces `MAX_BAG_LINES`.
+- [x] `updateBagQuantity`: 0 removes the line; clamps to stock with an "Only N available" message; a sold-out product is removed; an invalid quantity or missing line is rejected.
+- [x] `removeFromBag`: removes the line, and invalid input leaves the cookie unchanged.
 
 ### Phase 4: Checkout and orders (integration, highest risk)
 - [ ] `reserveOrder`: decrements stock, snapshots names and prices, ignores client-side prices; handles `empty` and `below_minimum`; **concurrency**: two parallel reservations for a product with stock 1 produce exactly one order.
@@ -129,3 +129,6 @@ Principles:
   - `MIN_CHARGE_CENTS` is pinned at 50. How `reserveOrder` enforces it is covered in Phase 4.
 - **2026-10-08, Phase 1 follow-up:** after the merge, `safeNext` also rejects same-origin paths that normalize to `//…` (e.g. `/.//evil.com`, `/a/..//evil.com`), which the first fix would have returned as a protocol-relative URL (commit `49eb03d`). Phase 2 adds the regression test to `redirects.test.ts`.
 - **2026-10-08, Phase 2** (branch `test/phase-2-catalog-reads`): `tests/integration/lib/products.test.ts` has 19 tests covering every export of `lib/products.ts`, with fixed `createdAt` values so "newest first" is deterministic. No bugs found. Checked by breaking the code twice: removing the LIKE escaping and removing the name-first ranking each make the matching tests fail.
+- **2026-10-08, Phase 3** (branch `test/phase-3-bag`): `tests/integration/lib/bag-server.test.ts` (readBag, writeBag cookie options, getBag clamping and ordering) and `tests/integration/app/bag/actions.test.ts` (every action, with a table of invalid inputs a client could send). Two bugs found and fixed:
+  - **Form strings were parsed with `Number()`.** `updateBagQuantity(id, "")` turned `""` into 0, deleted the line and reported "Removed from your bag." `" 2"`, `"1e3"` and `"0x10"` were also accepted. The actions now accept only plain digit strings. The UI only sends numbers, so this was reachable only through crafted requests, which affect nothing but the caller's own bag.
+  - **Quantities the cookie can't hold.** Cookie lines store at most 4 digits, but the actions only clamped to stock. With 10,000+ in stock, setting quantity 20,000 reported success and wrote `id:20000`, which `parseBag` then dropped, so the line vanished. A new `MAX_LINE_QUANTITY` (9,999) in `lib/bag.ts` is used by `parseBag` and by the actions, which now cap at `min(stock, MAX_LINE_QUANTITY)`.
