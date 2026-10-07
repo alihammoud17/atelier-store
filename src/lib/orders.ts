@@ -478,6 +478,35 @@ export async function getStaleOrders(minutes: number) {
     .orderBy(asc(orders.createdAt));
 }
 
+export type ReconcileResult =
+  | { orderId: string; outcome: "released" }
+  | { orderId: string; outcome: "synced"; session: Stripe.Checkout.Session | null }
+  | { orderId: string; outcome: "error"; error: unknown };
+
+/**
+ * Settles checkouts whose webhooks were missed: each stale pending or processing order is
+ * released when it never got a session, otherwise its session is retrieved from Stripe and
+ * applied like the webhook would. One order failing doesn't stop the others.
+ */
+export async function reconcileStaleOrders(minutes: number): Promise<ReconcileResult[]> {
+  const results: ReconcileResult[] = [];
+  for (const order of await getStaleOrders(minutes)) {
+    try {
+      if (!order.sessionId) {
+        // The Checkout Session was never created, so nothing can be paid.
+        await failOrder(order.id);
+        results.push({ orderId: order.id, outcome: "released" });
+      } else {
+        const session = await syncCheckoutSession(order.sessionId);
+        results.push({ orderId: order.id, outcome: "synced", session });
+      }
+    } catch (error) {
+      results.push({ orderId: order.id, outcome: "error", error });
+    }
+  }
+  return results;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Customer order history
 

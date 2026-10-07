@@ -3,29 +3,25 @@
 // Usage: pnpm orders:reconcile
 import "dotenv/config";
 import { db } from "./index";
-import { failOrder, getStaleOrders, syncCheckoutSession } from "@/lib/orders";
+import { reconcileStaleOrders } from "@/lib/orders";
 
 // Sessions expire after 31 minutes, so anything older has a final state at Stripe.
 const STALE_AFTER_MINUTES = 35;
 
 async function main() {
-  const stale = await getStaleOrders(STALE_AFTER_MINUTES);
-  console.log(`${stale.length} stale order(s)`);
+  const results = await reconcileStaleOrders(STALE_AFTER_MINUTES);
+  console.log(`${results.length} stale order(s)`);
 
-  for (const order of stale) {
-    try {
-      if (!order.sessionId) {
-        // The Checkout Session was never created, so nothing can be paid.
-        await failOrder(order.id);
-        console.log(`${order.id}: no session, released`);
-        continue;
-      }
-      const session = await syncCheckoutSession(order.sessionId);
+  for (const result of results) {
+    if (result.outcome === "released") {
+      console.log(`${result.orderId}: no session, released`);
+    } else if (result.outcome === "synced") {
+      const { session } = result;
       console.log(
-        `${order.id}: ${session ? `Stripe ${session.status}/${session.payment_status}` : "unknown to Stripe"}`,
+        `${result.orderId}: ${session ? `Stripe ${session.status}/${session.payment_status}` : "unknown to Stripe"}`,
       );
-    } catch (error) {
-      console.error(`${order.id}: failed`, error);
+    } else {
+      console.error(`${result.orderId}: failed`, result.error);
       process.exitCode = 1;
     }
   }
