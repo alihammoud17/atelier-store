@@ -1,13 +1,18 @@
 // Run with: pnpm test (or pnpm exec vitest run tests/unit/lib/checkout.test.ts)
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { orderStatus } from "@/db/schema";
 import {
   buildCheckoutLines,
   checkoutTotalCents,
   decideTransition,
+  formatOrderDate,
   isCheckoutEventType,
   isCheckoutSessionId,
   isOrderId,
+  MIN_CHARGE_CENTS,
+  orderReference,
+  orderStatusLabels,
   type OrderStatus,
   type SessionSnapshot,
 } from "@/lib/checkout";
@@ -139,4 +144,37 @@ test("ID guards", () => {
   assert.ok(!isCheckoutSessionId("pi_123"));
   assert.ok(isCheckoutEventType("checkout.session.expired"));
   assert.ok(!isCheckoutEventType("payment_intent.succeeded"));
+});
+
+test("checkoutTotalCents multiplies unit prices by quantity in integer cents", () => {
+  assert.equal(checkoutTotalCents([]), 0);
+  assert.equal(
+    checkoutTotalCents([
+      { unitPriceCents: 189_000, quantity: 2 },
+      { unitPriceCents: 4_850, quantity: 3 },
+      { unitPriceCents: 1, quantity: 1 },
+    ]),
+    378_000 + 14_550 + 1,
+  );
+});
+
+test("MIN_CHARGE_CENTS is Stripe's USD minimum of $0.50", () => {
+  assert.equal(MIN_CHARGE_CENTS, 50);
+});
+
+test("orderReference is the first 8 characters of the order ID, uppercased", () => {
+  assert.equal(orderReference("3f1c2b9e-8f44-4d7a-9a8e-1b2c3d4e5f60"), "3F1C2B9E");
+});
+
+test("formatOrderDate uses the store's time zone, not UTC or the server's", () => {
+  // America/New_York is UTC-4 in October (EDT) and UTC-5 in January (EST).
+  assert.equal(formatOrderDate(new Date("2026-10-07T03:59:00Z")), "October 6, 2026");
+  assert.equal(formatOrderDate(new Date("2026-10-07T04:00:00Z")), "October 7, 2026");
+  assert.equal(formatOrderDate(new Date("2026-01-15T04:59:00Z")), "January 14, 2026");
+  assert.equal(formatOrderDate(new Date("2026-01-15T05:00:00Z")), "January 15, 2026");
+});
+
+test("every order status in the database has a customer-facing label", () => {
+  assert.deepEqual(Object.keys(orderStatusLabels).sort(), [...orderStatus.enumValues].sort());
+  for (const label of Object.values(orderStatusLabels)) assert.ok(label.trim().length > 0);
 });
