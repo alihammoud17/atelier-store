@@ -1,4 +1,4 @@
-// Run with: pnpm test (or pnpm exec vitest run src/lib/bag.test.ts)
+// Run with: pnpm test (or pnpm exec vitest run tests/unit/lib/bag.test.ts)
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
@@ -9,7 +9,7 @@ import {
   readBagCookie,
   serializeBag,
   subtotalCents,
-} from "./bag";
+} from "@/lib/bag";
 
 test("parseBag round-trips serializeBag", () => {
   const lines = [

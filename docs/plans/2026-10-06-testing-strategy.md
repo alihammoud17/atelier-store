@@ -3,7 +3,7 @@
 - **Date:** 2026-10-06
 - **Branch:** main
 - **Goal:** Build a test foundation (Vitest unit/integration/component and Playwright E2E), then add coverage one feature at a time, highest-risk areas first.
-- **Status:** in-progress (Phase 0 done on branch `test/phase-0-foundation`; next: Phase 1)
+- **Status:** in-progress (Phase 0 merged; Phase 1 on branch `test/phase-1-pure-helpers`)
 - **Approval:** approved in plan mode
 
 ## Context
@@ -12,10 +12,10 @@ The store already has a catalog, bag, auth, Stripe checkout, webhooks, reconcili
 ## Test layers
 | Layer | Tool | File pattern | What it covers |
 |---|---|---|---|
-| Unit | Vitest (node env) | `*.test.ts` next to the source | Pure helpers in client-safe modules (`bag.ts`, `checkout.ts`, `catalog.ts`, `redirects.ts`) |
-| Integration | Vitest + real Postgres test DB | `*.int.test.ts` | `lib/products.ts`, `lib/orders.ts`, `lib/bag-server.ts`, server actions, route handlers, `proxy.ts`, `session.ts`, Better Auth |
-| Component | Vitest + jsdom + Testing Library | `*.test.tsx` | Only client components that contain logic |
-| E2E | Playwright | `e2e/*.spec.ts` | A few critical browser flows against a built app |
+| Unit | Vitest (node env) | `tests/unit/**/*.test.ts` | Pure helpers in client-safe modules (`bag.ts`, `checkout.ts`, `catalog.ts`, `redirects.ts`) |
+| Integration | Vitest + real Postgres test DB | `tests/integration/**/*.test.ts` | `lib/products.ts`, `lib/orders.ts`, `lib/bag-server.ts`, server actions, route handlers, `proxy.ts`, `session.ts`, Better Auth |
+| Component | Vitest + jsdom + Testing Library | `tests/unit/**/*.test.tsx` | Only client components that contain logic |
+| E2E | Playwright | `tests/e2e/*.spec.ts` | A few critical browser flows against a built app |
 
 Principles:
 - Use a real Postgres for anything that touches `@/db`; don't mock Drizzle. Row locks, check constraints and `on conflict` behaviour are the things worth testing.
@@ -122,3 +122,4 @@ Principles:
   - Extra helpers: `signedWebhookRequest()` and `invalidRequestError()` in `src/test/stripe.ts`, and `src/test/env.ts` (env loading and the `_test` guard).
   - `.gitignore`: allows `.env.test.example` and ignores Playwright output folders.
 - **2026-10-07, test env:** `.env.test` only needs `DATABASE_URL`, and the shell value wins when set (CI). `vitest.config.mts` always forces dummy `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` and `NEXT_PUBLIC_APP_URL`, overriding `.env.test` and the shell. A foundation test asserts this, after it caught real keys coming from a `.env.test` copied from `.env`.
+- **2026-10-07, test layout:** tests moved from next to their source into a top-level `tests/` folder, organized by scope. `tests/unit/` holds `*.test.ts` (unit project) and `*.test.tsx` (component project); `tests/integration/` and `tests/e2e/` hold the other scopes; helpers are in `tests/helpers/` (was `src/test/`). Inside each scope, paths mirror `src/`. The `.int.test.ts` suffix is gone because the folder sets the scope. Tests import helpers through a new `@tests/*` tsconfig alias. Earlier entries keep their original paths.

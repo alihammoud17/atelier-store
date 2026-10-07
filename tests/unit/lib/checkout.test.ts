@@ -1,4 +1,4 @@
-// Run with: pnpm test (or pnpm exec vitest run src/lib/checkout.test.ts)
+// Run with: pnpm test (or pnpm exec vitest run tests/unit/lib/checkout.test.ts)
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
@@ -10,7 +10,7 @@ import {
   isOrderId,
   type OrderStatus,
   type SessionSnapshot,
-} from "./checkout";
+} from "@/lib/checkout";
 
 const row = (productId: number, stock: number, priceCents = 1000) => ({
   productId,
