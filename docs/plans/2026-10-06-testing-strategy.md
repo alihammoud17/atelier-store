@@ -3,7 +3,7 @@
 - **Date:** 2026-10-06
 - **Branch:** main
 - **Goal:** Build a test foundation (Vitest unit/integration/component and Playwright E2E), then add coverage one feature at a time, highest-risk areas first.
-- **Status:** in-progress (Phases 0–3 merged; Phases 4–7 on branch `test/phases-4-7`; next: Phase 8)
+- **Status:** in-progress (Phases 0–7 merged; Phase 8 on branch `test/phase-8-e2e`; next: Phase 9)
 - **Approval:** approved in plan mode
 
 ## Context
@@ -79,8 +79,8 @@ Principles:
 - [x] `BagLink` (count from the cookie, updates on the `bag-change` event), `useBagAction` (dispatches the event), `QuantityStepper` bounds, `AuthForm` (errors and `safeNext` redirect), `PaymentStatusPoller` (stops on a final status, using fake timers).
 
 ### Phase 8: E2E (Playwright)
-- [ ] `playwright.config.ts`: `webServer` runs build + start against the test DB (seeded with `db:seed`), Chromium only to start.
-- [ ] Flows: browse → product → add to bag → header count → change quantity → remove; sign up → account → sign out; `/account` and `/admin` redirect when signed out, and `/admin` 404s for a customer; checkout start redirects to `checkout.stripe.com` and a signed webhook marks the order paid, after which it appears in order history. This flow runs only when a sandbox `STRIPE_SECRET_KEY` is present and is skipped otherwise.
+- [x] `playwright.config.ts`: `webServer` runs build + start against the test DB (seeded with `db:seed`), Chromium only to start.
+- [x] Flows: browse → product → add to bag → header count → change quantity → remove; sign up → account → sign out; `/account` and `/admin` redirect when signed out, and `/admin` 404s for a customer; checkout start redirects to `checkout.stripe.com` and a signed webhook marks the order paid, after which it appears in order history. This flow runs only when a sandbox `STRIPE_SECRET_KEY` is present and is skipped otherwise.
 
 ### Phase 9: CI
 - [ ] GitHub Actions workflow: a Postgres service, `pnpm install`, then lint, typecheck, `test`, `test:int`; a separate E2E job (with Playwright browsers cached).
@@ -140,3 +140,17 @@ Principles:
   - **Refactors for testability** (no behaviour change): the loop in `pnpm orders:reconcile` moved into `reconcileStaleOrders()` in `lib/orders.ts`, and `pnpm auth:make-admin` now calls `grantAdminRole()` in a new `src/db/roles.ts`. The scripts kept only their CLI parts, because importing them would load `.env` and close the shared pool.
   - **New helpers:** `tests/helpers/auth.ts`, `tests/helpers/checkout.ts` (`createReservedOrder` via the real `reserveOrder`), `tests/helpers/queries.ts`, and `testCookies.remove()`.
   - **Mutation checks:** removing the stock row lock, the `user_id` filter in `getCustomerOrder`, or `disableCookieCache` in `requireAdmin` each make a test fail.
+- **2026-10-08, Phase 8** (branch `test/phase-8-e2e`): Playwright with Chromium. 10 specs, plus the checkout spec, which needs a key.
+  - **Server:** `playwright.config.ts` runs `tests/e2e/prepare.ts` (migrate, truncate, `db:seed` on the `_test` DB), then `next build` + `next start` on port 3100. `reuseExistingServer` is false so every run starts clean. All server env is fixed in `tests/e2e/env.ts`, not read from `.env`.
+  - **Build output:** an E2E-only build folder (`distDir: .next-e2e`) was tried and dropped. `next build` then rewrote `tsconfig.json` and `next-env.d.ts` to point at it, and Next 16 already keeps `next dev` in `.next/dev`, so build and dev can run at the same time.
+  - **Specs:**
+    - `shopping.spec.ts`: browse → product → bag count → quantity → remove; the stock limit and a reload; sold out; search.
+    - `auth.spec.ts`: sign up → account → sign out; return to `next` after sign-in; crafted `?next=` values (`//`, `%09`, `/.//`) stay on the site; protected-page redirects; a customer gets a 404 from `/admin`; the sign-in rate limit.
+    - `checkout.spec.ts`: a real sandbox Checkout Session, with the redirect to `checkout.stripe.com` intercepted; a signed `checkout.session.completed` webhook marks the order paid; the success page clears the bag; the order appears in the account. It runs only with `E2E_STRIPE_SECRET_KEY`. Verified on 2026-10-08 against the Stripe sandbox (3 consecutive green runs).
+  - **Rate limiting:** Better Auth limits sign-up and sign-in to 3 per 10 s per IP in production builds, and parallel tests all came from 127.0.0.1. The shared `test` fixture in `tests/e2e/helpers.ts` gives each test its own `X-Forwarded-For` IP, and a spec checks that the limit kicks in.
+  - **Not an app bug:** Next's route announcer also has `role="alert"`, so specs scope alert lookups to `<main>`.
+  - Stable over `--repeat-each 3` (30/30).
+  - **First checkout run:** the server logged `⨯ Error: The destination stream closed early.` when the spec left `/checkout/success`. Cause: `ClearBagOnSuccess` calls `completeCheckout`, which changes cookies, so Next streams a re-render of the page after the action's result. That re-render takes ~0.4 s, because `loadOrder()` calls Stripe again. The client resolves the action at the first chunk (~66 ms), so the test navigated away mid-stream. Replaying the captured request showed the server finishes normally (462 ms), so it was harmless. The spec now waits for the action's Resource Timing entry before leaving; `networkidle` and `response.finished()` never fired for this streamed fetch in Chromium.
+  - **Follow-ups, not fixed here:**
+    - Footer links point to pages that don't exist (`/help/contact`, `/help/shipping`, `/help/returns`, `/help/care`, `/about`, `/about/craft`, `/about/sustainability`, `/careers`). Their prefetches return 404 on every page.
+    - Clearing the bag after payment re-renders the success page, which asks Stripe for the session a second time.

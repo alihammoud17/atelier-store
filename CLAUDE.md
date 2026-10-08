@@ -29,7 +29,7 @@ pnpm test:int       # Vitest integration tests against the Postgres test databas
 pnpm test:all       # all Vitest projects
 pnpm test:watch     # unit + component in watch mode
 pnpm test:coverage  # all projects with v8 coverage
-pnpm test:e2e       # Playwright (configured in a later phase)
+pnpm test:e2e       # Playwright: builds and serves the app on :3100 against the _test DB
 ```
 
 See Testing below.
@@ -96,7 +96,10 @@ Strategy and phases: `docs/plans/2026-10-06-testing-strategy.md`. New features s
 - Tests live in `tests/`, organized by scope. Inside each scope folder, mirror the `src/` path of the code under test (e.g. `src/lib/checkout.ts` → `tests/unit/lib/checkout.test.ts`). Import app code through `@/…` and helpers through `@tests/helpers/…`.
   - `tests/unit/`: `*.test.ts` runs in the Vitest **unit** project (pure, client-safe helpers, no DB). `*.test.tsx` runs in the **component** project (jsdom + Testing Library, only for client components with logic).
   - `tests/integration/`: `*.test.ts` runs in the **integration** project (real Postgres, one file at a time).
-  - `tests/e2e/`: Playwright (Phase 8).
+  - `tests/e2e/`: Playwright `*.spec.ts` (Chromium). `pnpm test:e2e` prepares the `_test` database (migrate, truncate, `db:seed`) in `tests/e2e/prepare.ts`, then runs `next build` + `next start` on port 3100. The build goes to `.next`, like `pnpm build`; `next dev` uses `.next/dev`, so both can run at once. Server env is fixed in `tests/e2e/env.ts` and never read from `.env`; only `DATABASE_URL` comes from the shell or `.env.test`.
+    - Import `test`/`expect` from `tests/e2e/helpers.ts`, not `@playwright/test`. Its `test` gives every test its own `X-Forwarded-For` IP, because Better Auth rate-limits sign-up and sign-in per IP (3 per 10 s) in production builds.
+    - The checkout spec creates a real Stripe sandbox session and runs only when `E2E_STRIPE_SECRET_KEY` (a test-mode key) is set in the shell or `.env.test`. Payment is simulated with a webhook signed with the E2E secret.
+    - One-time setup: `pnpm exec playwright install chromium`.
   - `tests/helpers/`: setup files and shared helpers, never tests.
 - Integration tests take only `DATABASE_URL` from the environment: the shell (CI), otherwise `.env.test` (template: `.env.test.example`), **never `.env`**. It must name a database ending in `_test`, or the run refuses to start. Stripe, Better Auth and app-URL variables are fixed dummies in `vitest.config.mts` that override `.env.test` and the shell, so tests never use real keys. The global setup creates the database if it's missing and applies `./drizzle` migrations, so run `db:generate` before testing a schema change.
 - Every integration test starts with all tables truncated (identities restarted), empty cookies and unstubbed Stripe (`tests/helpers/setup-integration.ts`). Build data with `tests/helpers/factories.ts`; don't depend on the seed catalog. Other helpers:
