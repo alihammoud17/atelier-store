@@ -91,7 +91,21 @@ Stack: App Router under `src/app`, TypeScript with the `@/*` → `src/*` path al
 
 ## Testing
 
-Strategy and phases: `docs/plans/2026-10-06-testing-strategy.md`. New features ship with tests.
+Strategy and phases: `docs/plans/2026-10-06-testing-strategy.md`.
+
+**Tests are part of done**
+- Every plan, feature and fix ships with its tests in the same PR. A change without tests isn't done.
+- **Pick the cheapest layer that can catch the failure**, and don't repeat a check at every layer:
+  - **Unit** (`tests/unit/`): pure logic in client-safe modules: parsing, formatting, money math, state transitions (e.g. `decideTransition`).
+  - **Integration** (`tests/integration/`): anything touching Postgres, cookies, server actions, route handlers, auth or Stripe. This is the default for server code.
+  - **Component** (`tests/unit/**/*.test.tsx`): client components with logic (state, validation, events), not presentational markup.
+  - **E2E** (`tests/e2e/`): only a critical user journey, or a change in how layers connect (routing, proxy, cookies across requests, redirects to Stripe). Extend an existing spec before adding a new one, and keep the suite fast.
+- **Bug fixes:** first write a test that fails because of the bug, then fix it. Commit the fix together with that test (`fix: …`), and name the bug in the test title.
+- **Security-relevant code** (auth, redirects, prices and totals, stock, order state, webhooks): test the hostile inputs too (forged, tampered, out of range, someone else's data), not only the happy path. Then check the test can fail: break the guard on purpose, see the test fail, and restore it.
+- **Plans** in `docs/plans/` have a "Tests" section listing the tests per step and layer, and a step isn't ticked until its tests pass.
+- **Before opening a PR:** `pnpm typecheck && pnpm lint && pnpm test:all`, plus `pnpm test:e2e` when user flows, routing, auth or checkout changed. The PR's test plan lists what was added and what was run. Until CI exists (go-live plan), these runs are the only gate.
+
+**Test setup**
 
 - Tests live in `tests/`, organized by scope. Inside each scope folder, mirror the `src/` path of the code under test (e.g. `src/lib/checkout.ts` → `tests/unit/lib/checkout.test.ts`). Import app code through `@/…` and helpers through `@tests/helpers/…`.
   - `tests/unit/`: `*.test.ts` runs in the Vitest **unit** project (pure, client-safe helpers, no DB). `*.test.tsx` runs in the **component** project (jsdom + Testing Library, only for client components with logic).
