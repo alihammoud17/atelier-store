@@ -3,7 +3,7 @@
 - **Date:** 2026-10-06
 - **Branch:** main
 - **Goal:** Build a test foundation (Vitest unit/integration/component and Playwright E2E), then add coverage one feature at a time, highest-risk areas first.
-- **Status:** in-progress (Phases 0–7 merged; Phase 8 on branch `test/phase-8-e2e`; next: Phase 9)
+- **Status:** done (Phases 0–8 merged; CI moved to a separate go-live plan)
 - **Approval:** approved in plan mode
 
 ## Context
@@ -82,9 +82,6 @@ Principles:
 - [x] `playwright.config.ts`: `webServer` runs build + start against the test DB (seeded with `db:seed`), Chromium only to start.
 - [x] Flows: browse → product → add to bag → header count → change quantity → remove; sign up → account → sign out; `/account` and `/admin` redirect when signed out, and `/admin` 404s for a customer; checkout start redirects to `checkout.stripe.com` and a signed webhook marks the order paid, after which it appears in order history. This flow runs only when a sandbox `STRIPE_SECRET_KEY` is present and is skipped otherwise.
 
-### Phase 9: CI
-- [ ] GitHub Actions workflow: a Postgres service, `pnpm install`, then lint, typecheck, `test`, `test:int`; a separate E2E job (with Playwright browsers cached).
-
 ## Working rhythm for each phase
 1. Write the tests for that feature, then run them.
 2. If a test shows a real bug, fix it in its own commit with the test as the regression guard, and list it in the PR.
@@ -106,12 +103,12 @@ Principles:
 - Load or performance testing.
 - Testing presentational components (home, product cards, UI primitives) and `auth-schema.ts` (it's generated).
 - Completing Stripe's hosted payment page inside E2E.
+- CI (a GitHub Actions workflow running these suites). It moved to a separate plan for going live; see Changes.
 
 ## Verification
 - `pnpm test` and `pnpm test:int` pass locally against `atelier_test`; `pnpm test:coverage` reports coverage for `src/lib` and `src/app/**/actions.ts` / `route.ts`.
 - Sanity-check a couple of tests by breaking the code on purpose (e.g. remove the `stock_released_at` guard in `releaseOrder`, or the `user_id` filter in `getCustomerOrder`) and confirm they fail.
 - `pnpm test:e2e` passes, with the Stripe flow skipped when no sandbox key is set.
-- The CI workflow is green on the PR.
 
 ## Changes
 - **2026-10-06, Phase 0 implementation** (branch `test/phase-0-foundation`):
@@ -154,3 +151,4 @@ Principles:
   - **Follow-ups, not fixed here:**
     - Footer links point to pages that don't exist (`/help/contact`, `/help/shipping`, `/help/returns`, `/help/care`, `/about`, `/about/craft`, `/about/sustainability`, `/careers`). Their prefetches return 404 on every page.
     - Clearing the bag after payment re-renders the success page, which asks Stripe for the session a second time.
+- **2026-10-08, Phase 9 removed:** the CI phase (a GitHub Actions workflow with a Postgres service running lint, typecheck, `test`, `test:int` and a separate E2E job) is out of this plan. It will be done in its own plan when the store goes live. With Phases 0–8 merged, this plan is done. Until CI exists, nothing runs the tests automatically: Vercel's build runs only `next build`.
