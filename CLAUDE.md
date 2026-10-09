@@ -89,6 +89,14 @@ Stack: App Router under `src/app`, TypeScript with the `@/*` → `src/*` path al
 - Scripts that import `server-only` modules run with `tsx --conditions=react-server` (see `orders:reconcile`).
 - Order history (`/account`, `/account/orders/[orderId]`) only reads through `getCustomerOrders`/`getCustomerOrder`, which filter by `user_id` in SQL. Another customer's order is a 404. Only placed orders are listed (`paid`, `processing`, `needs_review`, and `failed` with a payment intent); open or abandoned checkouts aren't orders.
 
+**Admin (`src/app/admin/`, `src/lib/admin-*.ts`, `src/components/admin/`)**
+- Products, categories, stock and orders, for users with `role: "admin"`. Design: `docs/plans/2026-10-08-admin-experience.md`.
+- **Every admin page and server action starts with `await requireAdmin()`**. `admin/layout.tsx` and `proxy.ts` check too, but don't count. `tests/unit/app/admin/guards.test.ts` fails if a page's or action's first statement isn't that call. Admin data functions don't check the session themselves.
+- `lib/admin-catalog.ts` (`server-only`) holds the admin catalog reads and writes. Admin order reads (`getAdminOrders`/`getAdminOrder`) live in `lib/orders.ts`, which owns orders, and list placed orders only, like order history. `lib/admin-forms.ts` (client-safe) parses and validates every form: dollars become integer cents through a regex, never `parseFloat`, and image URLs must be `https://images.unsplash.com/…` because `next.config.ts` has no `remotePatterns`.
+- Admin actions take `(state, formData)` for `useActionState`. On failure they return `fieldErrors` plus the submitted `values`, because React resets the form after an action. A `<select>` only applies `defaultValue` on mount, so key it on the returned value. After a write they call `revalidatePath("/", "layout")`, since catalog data shows across the storefront.
+- **Stock:** `product_stock.quantity` is *available* stock, because open checkouts have already taken their units off. Admins set available stock. `setStock` only writes if the row still holds the `expected` value the form showed. Otherwise it returns the current value, so a concurrent reservation is never overwritten.
+- Deleting a category relies on the `restrict` foreign key, which Postgres reports as `23001`, not `23503`. Products can't be deleted yet.
+
 ## Testing
 
 Strategy and phases: `docs/plans/2026-10-06-testing-strategy.md`.
@@ -120,9 +128,11 @@ Strategy and phases: `docs/plans/2026-10-06-testing-strategy.md`.
   - `tests/helpers/auth.ts`: `signUpAndSignIn()` creates a real Better Auth session in the cookie jar (`role: "admin"` is granted in the DB).
   - `tests/helpers/checkout.ts`: `createReservedOrder()` goes through the real `reserveOrder`.
   - `tests/helpers/queries.ts`: read-backs for orders, stock and Stripe events.
+  - `tests/helpers/admin.ts`: `expectAdminOnly(run)` checks a visitor gets the sign-in redirect and a customer a 404, with nothing revalidated. `formData()` builds form submissions.
 - CLI scripts in `src/db/` keep only argument parsing and logging, so their logic is testable: it lives in importable functions (`reconcileStaleOrders` in `lib/orders.ts`, `grantAdminRole` in `db/roles.ts`). Importing a script would load `.env` and close the shared pool.
 - Use a real Postgres, never a mocked Drizzle. Mock only at the boundaries, which the integration setup already does:
   - `next/headers` → `tests/helpers/next-headers.ts`: seed or inspect cookies with `testCookies`; `headers()` carries the jar as a `cookie` header.
+  - `next/cache` → `tests/helpers/next-cache.ts`: `revalidatePath` and friends are spies, reset before each test.
   - `@/lib/stripe` → `tests/helpers/stripe.ts`: stub calls on `stripeMock` per test (unstubbed calls reject). Build sessions and events with `makeCheckoutSession`/`makeEvent`, and webhook requests with `signedWebhookRequest`, which uses real SDK signatures.
   - Assert `redirect()`/`notFound()` with `expectRedirect`/`expectNotFound` from `tests/helpers/navigation.ts`.
 - `server-only` is aliased to an empty module in tests, so server modules import directly.
