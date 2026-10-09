@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CatalogImage, MediaFrame } from "@/components/ui";
-import { formatPrice, type Product } from "@/lib/catalog";
+import { formatPrice, getStockStatus, type Product } from "@/lib/catalog";
+import { StockStatus } from "./stock-status";
 import { WishlistButton } from "./wishlist-button";
 
 // Image sizes for the product grid/rail: 2 columns → 3 at md → 4 at xl.
@@ -35,6 +36,8 @@ export function ProductCard({ product, sizes = cardSizes }: { product: Product; 
           </Link>
         </h3>
         <p className="text-sm text-ink-muted">{formatPrice(product.priceCents)}</p>
+        {/* Only low and sold-out pieces get a line; "In stock" on every card would be noise. */}
+        {getStockStatus(product.stock) !== "in-stock" && <StockStatus stock={product.stock} />}
       </div>
     </article>
   );

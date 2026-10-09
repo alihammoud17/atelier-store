@@ -80,8 +80,31 @@ describe("searchProducts", () => {
       priceCents: 48_000,
       image: { src: plain.imageSrc, alt: plain.imageAlt },
       badge: undefined,
+      stock: 10,
     });
     expect(badged.badge).toBe("New");
+  });
+});
+
+describe("listing reads", () => {
+  test("carry live stock for product cards, and 0 for a product without a stock row", async () => {
+    const shoes = await createCategory({ name: "Shoes" });
+    const low = await createProduct({ name: "Derby", categoryId: shoes.id, stock: 2, isGiftEdit: true, createdAt: day(1) });
+    const none = await createProduct({ name: "Loafer", categoryId: shoes.id, stock: null, createdAt: day(2) });
+    const soldOut = await createProduct({ name: "Boot", categoryId: shoes.id, stock: 0, createdAt: day(3) });
+    const stock = (rows: { id: number; stock: number }[]) => rows.map(({ id, stock }) => ({ id, stock }));
+    const expected = [
+      { id: soldOut.id, stock: 0 },
+      { id: none.id, stock: 0 },
+      { id: low.id, stock: 2 },
+    ];
+
+    expect(stock(await getNewArrivals())).toEqual(expected);
+    expect(stock(await getCategoryProducts(shoes.id))).toEqual(expected);
+    expect(stock(await searchProducts("o"))).toEqual(expected);
+    expect(stock(await getGiftEdit())).toEqual([{ id: low.id, stock: 2 }]);
+    const derby = await getProduct(low.slug);
+    expect(stock(await getRelatedProducts(derby!))).toEqual([expected[0], expected[1]]);
   });
 });
 

@@ -16,6 +16,8 @@ export type Product = {
   priceCents: number;
   image: Image;
   badge?: string;
+  /** Units available now; drives the stock state on cards, the product page and the bag. */
+  stock: number;
 };
 
 export type StockStatus = "in-stock" | "low-stock" | "out-of-stock";
@@ -23,8 +25,6 @@ export type StockStatus = "in-stock" | "low-stock" | "out-of-stock";
 export type ProductDetails = {
   description: string;
   details: string[];
-  /** Units available; drives the stock state shown on the product page. */
-  stock: number;
 };
 
 export type Collection = {

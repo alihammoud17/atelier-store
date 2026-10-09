@@ -17,6 +17,8 @@ const productColumns = {
   imageSrc: products.imageSrc,
   imageAlt: products.imageAlt,
   badge: products.badge,
+  // A product without a stock row has none to sell.
+  stock: sql<number>`coalesce(${productStock.quantity}, 0)`.mapWith(Number),
 };
 
 type ProductRow = {
@@ -28,6 +30,7 @@ type ProductRow = {
   imageSrc: string;
   imageAlt: string;
   badge: string | null;
+  stock: number;
 };
 
 function toProduct({ imageSrc, imageAlt, badge, ...row }: ProductRow): Product {
@@ -38,7 +41,8 @@ function selectProducts() {
   return db
     .select(productColumns)
     .from(products)
-    .innerJoin(categories, eq(products.categoryId, categories.id));
+    .innerJoin(categories, eq(products.categoryId, categories.id))
+    .leftJoin(productStock, eq(productStock.productId, products.id));
 }
 
 export async function getNewArrivals(limit = 8) {
@@ -122,7 +126,6 @@ export const getProduct = cache(async (slug: string): Promise<ProductWithDetails
       categoryId: products.categoryId,
       description: products.description,
       details: products.details,
-      stock: sql<number>`coalesce(${productStock.quantity}, 0)`.mapWith(Number),
     })
     .from(products)
     .innerJoin(categories, eq(products.categoryId, categories.id))
@@ -131,8 +134,8 @@ export const getProduct = cache(async (slug: string): Promise<ProductWithDetails
     .limit(1);
   if (!row) return undefined;
 
-  const { categoryId, description, details, stock, ...product } = row;
-  return { ...toProduct(product), categoryId, description, details, stock };
+  const { categoryId, description, details, ...product } = row;
+  return { ...toProduct(product), categoryId, description, details };
 });
 
 /** Same-category pieces first, then the rest of the catalog, newest first. */
@@ -147,14 +150,6 @@ export async function getRelatedProducts(product: ProductWithDetails, limit = 4)
 /** Live price, details and stock for the products in a bag. Missing IDs are simply absent. */
 export async function getBagProducts(ids: number[]) {
   if (ids.length === 0) return [];
-  const rows = await db
-    .select({
-      ...productColumns,
-      stock: sql<number>`coalesce(${productStock.quantity}, 0)`.mapWith(Number),
-    })
-    .from(products)
-    .innerJoin(categories, eq(products.categoryId, categories.id))
-    .leftJoin(productStock, eq(productStock.productId, products.id))
-    .where(inArray(products.id, ids));
-  return rows.map(({ stock, ...product }) => ({ ...toProduct(product), stock }));
+  const rows = await selectProducts().where(inArray(products.id, ids));
+  return rows.map(toProduct);
 }

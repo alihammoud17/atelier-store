@@ -6,6 +6,8 @@ test("an admin adds a category and a product, reprices it, sells it out, restock
   const suffix = randomBytes(3).toString("hex");
   const category = { name: `Knitwear ${suffix}`, slug: `knitwear-${suffix}` };
   const product = { name: `Cable Knit Jumper ${suffix}`, slug: `cable-knit-jumper-${suffix}` };
+  // The product's own details; related-piece cards further down show stock too.
+  const productDetails = page.getByRole("main").locator("section").first();
   await signUpAdmin(page);
 
   // Category
@@ -45,7 +47,7 @@ test("an admin adds a category and a product, reprices it, sells it out, restock
   await page.goto(`/products/${product.slug}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(product.name);
   await expect(page.getByRole("main").getByText("$245").first()).toBeVisible();
-  await expect(page.getByText("Only 2 left")).toBeVisible();
+  await expect(productDetails.getByText("Only 2 left")).toBeVisible();
 
   // Reprice
   await page.goto(editUrl);
@@ -68,7 +70,7 @@ test("an admin adds a category and a product, reprices it, sells it out, restock
   // The page re-renders, so the set form starts from the new stock too.
   await expect(page.getByLabel(`Available stock for ${product.name}`)).toHaveValue("0");
   await page.goto(`/products/${product.slug}`);
-  await expect(page.getByText("Currently unavailable")).toBeVisible();
+  await expect(productDetails.getByText("Currently unavailable")).toBeVisible();
   await expect(page.getByRole("button", { name: "Sold out" })).toBeDisabled();
 
   // Restock by adding units
@@ -77,7 +79,7 @@ test("an admin adds a category and a product, reprices it, sells it out, restock
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("Added 5 units. 5 available.")).toBeVisible();
   await page.goto(`/products/${product.slug}`);
-  await expect(page.getByText("In stock", { exact: true })).toBeVisible();
+  await expect(productDetails.getByText("In stock", { exact: true })).toBeVisible();
 
   // Stock and orders
   await page.goto("/admin/stock");

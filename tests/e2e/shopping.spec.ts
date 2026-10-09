@@ -48,7 +48,17 @@ test("the bag survives a reload and stops at the stock level", async ({ page }) 
   await expect(page.getByText("Maximum available")).toBeVisible();
 });
 
-test("a sold-out product can't be added", async ({ page }) => {
+test("listings flag low and sold-out pieces, and a sold-out product can't be added", async ({ page }) => {
+  const card = (name: string) => page.getByRole("article").filter({ has: page.getByRole("link", { name }) });
+
+  await page.goto("/collections/bags");
+  await expect(card("Chevron Shoulder Bag").getByText("Only 2 left")).toBeVisible();
+  // In-stock pieces get no stock line.
+  await expect(card("Canvas City Backpack").getByText(/in stock|left|unavailable/i)).toHaveCount(0);
+
+  await page.goto("/collections/shoes");
+  await expect(card("Suede Derby Shoe").getByText("Currently unavailable")).toBeVisible();
+
   await page.goto("/products/suede-derby-shoe");
   await expect(page.getByRole("button", { name: "Sold out" })).toBeDisabled();
 });
