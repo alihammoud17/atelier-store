@@ -3,7 +3,14 @@ import "server-only";
 import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, orderItems, orders, products, productStock } from "@/db/schema";
-import type { CategoryField, CategoryInput, FieldErrors, ProductField, ProductInput } from "@/lib/admin-forms";
+import {
+  MAX_STOCK_QUANTITY,
+  type CategoryField,
+  type CategoryInput,
+  type FieldErrors,
+  type ProductField,
+  type ProductInput,
+} from "@/lib/admin-forms";
 
 // Admin reads and writes for products, categories and stock. Callers (admin pages and server
 // actions) must call requireAdmin() first; nothing here checks the session. Input is already
@@ -112,21 +119,28 @@ export async function getAdminCategory(id: number) {
   return row;
 }
 
-/** Units held by open checkouts: pending or processing orders that haven't released stock. */
-const reserved = db
+/**
+ * Units taken off stock by orders that haven't released it, apart from paid ones (sold):
+ * `reserved` by open checkouts (pending or processing), `held` by orders that need review.
+ */
+const held = db
   .select({
     productId: orderItems.productId,
-    quantity: sql<number>`sum(${orderItems.quantity})`.as("reserved_quantity"),
+    reserved: sql<number>`sum(${orderItems.quantity}) filter (where ${orders.status} <> 'needs_review')`.as(
+      "reserved_quantity",
+    ),
+    held: sql<number>`sum(${orderItems.quantity}) filter (where ${orders.status} = 'needs_review')`.as("held_quantity"),
   })
   .from(orderItems)
   .innerJoin(orders, eq(orders.id, orderItems.orderId))
-  .where(and(inArray(orders.status, ["pending", "processing"]), isNull(orders.stockReleasedAt)))
+  .where(and(inArray(orders.status, ["pending", "processing", "needs_review"]), isNull(orders.stockReleasedAt)))
   .groupBy(orderItems.productId)
-  .as("reserved");
+  .as("held");
 
 /**
- * Available stock (what `product_stock` holds: reservations are already taken off) and reserved
- * stock per product, by name. Pass a product ID for just that product.
+ * Available stock (what `product_stock` holds: reservations are already taken off), units
+ * reserved by open checkouts and units held by orders that need review, per product, by name.
+ * Pass a product ID for just that product.
  */
 export async function getStockOverview(productId?: number) {
   return db
@@ -136,12 +150,13 @@ export async function getStockOverview(productId?: number) {
       name: products.name,
       category: categories.name,
       available: stockQuantity,
-      reserved: sql<number>`coalesce(${reserved.quantity}, 0)`.mapWith(Number),
+      reserved: sql<number>`coalesce(${held.reserved}, 0)`.mapWith(Number),
+      held: sql<number>`coalesce(${held.held}, 0)`.mapWith(Number),
     })
     .from(products)
     .innerJoin(categories, eq(products.categoryId, categories.id))
     .leftJoin(productStock, eq(productStock.productId, products.id))
-    .leftJoin(reserved, eq(reserved.productId, products.id))
+    .leftJoin(held, eq(held.productId, products.id))
     .where(productId === undefined ? undefined : eq(products.id, productId))
     .orderBy(asc(products.name), asc(products.id));
 }
@@ -286,5 +301,44 @@ export async function setStock(
       .onConflictDoNothing()
       .returning({ quantity: productStock.quantity });
     return inserted.length > 0 ? { ok: true, quantity } : { ok: false, reason: "conflict", current: 0 };
+  });
+}
+
+export type AdjustStockResult =
+  | { ok: true; quantity: number }
+  | { ok: false; reason: "not_found" }
+  /** The change would take stock below 0 or above MAX_STOCK_QUANTITY; nothing was written. */
+  | { ok: false; reason: "out_of_range"; current: number };
+
+/**
+ * Adds `delta` units to a product's available stock (negative removes them). It's relative, so
+ * it applies on top of whatever checkouts reserved or released in the meantime and needs no
+ * expected value. The range check is part of the update, so it's against the stock at that
+ * moment: the row lock makes a concurrent checkout or adjustment wait, then re-check.
+ */
+export async function adjustStock(productId: number, delta: number): Promise<AdjustStockResult> {
+  return db.transaction(async (tx) => {
+    const [product] = await tx.select({ id: products.id }).from(products).where(eq(products.id, productId));
+    if (!product) return { ok: false, reason: "not_found" };
+
+    // No stock row yet: the storefront reads that as 0, so start from 0.
+    await tx.insert(productStock).values({ productId, quantity: 0 }).onConflictDoNothing();
+    const [updated] = await tx
+      .update(productStock)
+      .set({ quantity: sql`${productStock.quantity} + ${delta}` })
+      .where(
+        and(
+          eq(productStock.productId, productId),
+          sql`${productStock.quantity} + ${delta} between 0 and ${MAX_STOCK_QUANTITY}`,
+        ),
+      )
+      .returning({ quantity: productStock.quantity });
+    if (updated) return { ok: true, quantity: updated.quantity };
+
+    const [current] = await tx
+      .select({ quantity: productStock.quantity })
+      .from(productStock)
+      .where(eq(productStock.productId, productId));
+    return { ok: false, reason: "out_of_range", current: current.quantity };
   });
 }

@@ -2,7 +2,7 @@
 import { randomBytes } from "node:crypto";
 import { expect, signUpAdmin, test } from "./helpers";
 
-test("an admin adds a category and a product, reprices it, sells it out and checks orders", async ({ page }) => {
+test("an admin adds a category and a product, reprices it, sells it out, restocks it and checks orders", async ({ page }) => {
   const suffix = randomBytes(3).toString("hex");
   const category = { name: `Knitwear ${suffix}`, slug: `knitwear-${suffix}` };
   const product = { name: `Cable Knit Jumper ${suffix}`, slug: `cable-knit-jumper-${suffix}` };
@@ -55,18 +55,39 @@ test("an admin adds a category and a product, reprices it, sells it out and chec
   await page.goto(`/products/${product.slug}`);
   await expect(page.getByRole("main").getByText("$199").first()).toBeVisible();
 
-  // Sell out
+  // Sell out by removing units, with a refused removal first
   await page.goto(editUrl);
-  await page.getByLabel(`Available stock for ${product.name}`).fill("0");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("Stock set to 0 units.")).toBeVisible();
+  const units = page.getByLabel(`Units to add or remove for ${product.name}`);
+  await units.fill("3");
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(page.getByText("Only 2 units available to remove.")).toBeVisible();
+  await expect(units).toHaveValue("3");
+  await units.fill("2");
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(page.getByText("Removed 2 units. 0 available.")).toBeVisible();
+  // The page re-renders, so the set form starts from the new stock too.
+  await expect(page.getByLabel(`Available stock for ${product.name}`)).toHaveValue("0");
   await page.goto(`/products/${product.slug}`);
   await expect(page.getByText("Currently unavailable")).toBeVisible();
   await expect(page.getByRole("button", { name: "Sold out" })).toBeDisabled();
 
+  // Restock by adding units
+  await page.goto(editUrl);
+  await page.getByLabel(`Units to add or remove for ${product.name}`).fill("5");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText("Added 5 units. 5 available.")).toBeVisible();
+  await page.goto(`/products/${product.slug}`);
+  await expect(page.getByText("In stock", { exact: true })).toBeVisible();
+
   // Stock and orders
   await page.goto("/admin/stock");
-  await expect(page.getByLabel(`Available stock for ${product.name}`)).toHaveValue("0");
+  const stockRow = page.getByRole("row", { name: new RegExp(product.name) });
+  await expect(stockRow.getByLabel(`Available stock for ${product.name}`)).toHaveValue("5");
+  await expect(stockRow.getByRole("cell", { name: "In stock", exact: true })).toBeVisible();
+  await stockRow.getByLabel(`Available stock for ${product.name}`).fill("0");
+  await stockRow.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(stockRow.getByText("Stock set to 0 units.")).toBeVisible();
+  await expect(stockRow.getByRole("cell", { name: "Sold out", exact: true })).toBeVisible();
   await page.getByRole("navigation", { name: "Admin" }).getByRole("link", { name: "Orders" }).click();
   await expect(page).toHaveURL("/admin/orders");
   await expect(page.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();

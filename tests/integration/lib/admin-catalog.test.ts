@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { db } from "@/db";
 import { categories, products, productStock } from "@/db/schema";
 import {
+  adjustStock,
   createCategory,
   createProduct,
   deleteCategory,
@@ -16,8 +17,8 @@ import {
   updateCategory,
   updateProduct,
 } from "@/lib/admin-catalog";
-import type { ProductInput } from "@/lib/admin-forms";
-import { releaseOrder } from "@/lib/orders";
+import { MAX_STOCK_QUANTITY, type ProductInput } from "@/lib/admin-forms";
+import { releaseOrder, reserveOrder } from "@/lib/orders";
 import { createReservedOrder } from "@tests/helpers/checkout";
 import * as factories from "@tests/helpers/factories";
 import { getStock } from "@tests/helpers/queries";
@@ -197,5 +198,85 @@ describe("stock", () => {
     expect(await setStock(coat.id, { quantity: 10, expected: 3 })).toEqual({ ok: true, quantity: 10 });
     await db.transaction((tx) => releaseOrder(tx, order.orderId, "expired"));
     expect(await getStock(coat.id)).toBe(12);
+  });
+
+  test("getStockOverview shows units held by orders that need review apart from open checkouts", async () => {
+    const coat = await factories.createProduct({ stock: 5 });
+    await createReservedOrder([{ product: coat, quantity: 1 }]);
+    await factories.createOrder({ status: "needs_review", items: [{ product: coat, quantity: 2 }] });
+    // A needs-review order whose stock was already released holds nothing.
+    await factories.createOrder({
+      status: "needs_review",
+      stockReleasedAt: new Date(),
+      items: [{ product: coat, quantity: 3 }],
+    });
+
+    expect(await getStockOverview(coat.id)).toEqual([
+      expect.objectContaining({ productId: coat.id, available: 4, reserved: 1, held: 2 }),
+    ]);
+  });
+});
+
+describe("adjustStock", () => {
+  test("adds and removes units relative to the current stock", async () => {
+    const coat = await factories.createProduct({ stock: 3 });
+    expect(await adjustStock(coat.id, 12)).toEqual({ ok: true, quantity: 15 });
+    expect(await adjustStock(coat.id, -15)).toEqual({ ok: true, quantity: 0 });
+    expect(await getStock(coat.id)).toBe(0);
+  });
+
+  test("adding to a product with no stock row starts from 0; removing from it is out of range", async () => {
+    const coat = await factories.createProduct({ stock: null });
+    expect(await adjustStock(coat.id, -1)).toEqual({ ok: false, reason: "out_of_range", current: 0 });
+    expect(await adjustStock(coat.id, 4)).toEqual({ ok: true, quantity: 4 });
+    expect(await getStock(coat.id)).toBe(4);
+  });
+
+  test("refuses to take stock below 0 or above the maximum and reports the current stock", async () => {
+    const coat = await factories.createProduct({ stock: 3 });
+    expect(await adjustStock(coat.id, -4)).toEqual({ ok: false, reason: "out_of_range", current: 3 });
+    expect(await adjustStock(coat.id, MAX_STOCK_QUANTITY - 2)).toEqual({
+      ok: false,
+      reason: "out_of_range",
+      current: 3,
+    });
+    expect(await getStock(coat.id)).toBe(3);
+    expect(await adjustStock(coat.id, MAX_STOCK_QUANTITY - 3)).toEqual({ ok: true, quantity: MAX_STOCK_QUANTITY });
+  });
+
+  test("reports an unknown product and writes nothing", async () => {
+    expect(await adjustStock(999_999, 5)).toEqual({ ok: false, reason: "not_found" });
+    expect(await db.select().from(productStock)).toEqual([]);
+  });
+
+  test("an adjustment racing checkouts loses no update: final stock is the start plus every change", async () => {
+    const coat = await factories.createProduct({ stock: 10 });
+    const bag = (quantity: number) => ({ bag: [{ productId: coat.id, quantity }], userId: null, email: null });
+
+    const results = await Promise.all([
+      reserveOrder(bag(3)),
+      adjustStock(coat.id, 5),
+      reserveOrder(bag(2)),
+      adjustStock(coat.id, -4),
+    ]);
+
+    expect(results.every((result) => result.ok)).toBe(true);
+    expect(await getStock(coat.id)).toBe(10 - 3 + 5 - 2 - 4);
+    expect(await getStockOverview(coat.id)).toEqual([expect.objectContaining({ available: 6, reserved: 5 })]);
+  });
+
+  test("two admins adjusting at once: both changes apply, and stock never goes below 0", async () => {
+    const coat = await factories.createProduct({ stock: 5 });
+    expect(await Promise.all([adjustStock(coat.id, 7), adjustStock(coat.id, -2)])).toEqual([
+      { ok: true, quantity: expect.any(Number) },
+      { ok: true, quantity: expect.any(Number) },
+    ]);
+    expect(await getStock(coat.id)).toBe(10);
+
+    // Two removals that each fit alone but not together: exactly one applies.
+    const results = await Promise.all([adjustStock(coat.id, -6), adjustStock(coat.id, -6)]);
+    expect(results.filter((result) => result.ok)).toEqual([{ ok: true, quantity: 4 }]);
+    expect(results.filter((result) => !result.ok)).toEqual([{ ok: false, reason: "out_of_range", current: 4 }]);
+    expect(await getStock(coat.id)).toBe(4);
   });
 });

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AdjustStockForm } from "@/components/admin/adjust-stock-form";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { ProductForm } from "@/components/admin/product-form";
 import { StockForm } from "@/components/admin/stock-form";
@@ -59,12 +60,24 @@ export default async function EditProductPage({ params, searchParams }: PageProp
           <Heading as="h2" id="product-stock-title" size="lg">
             Stock
           </Heading>
-          <StockForm productId={product.id} productName={product.name} available={stock.available} />
+          <div className="flex flex-col gap-2">
+            <p className="text-label text-ink-muted">Available</p>
+            <StockForm productId={product.id} productName={product.name} available={stock.available} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-label text-ink-muted">Add or remove</p>
+            <AdjustStockForm productId={product.id} productName={product.name} />
+          </div>
           <Text size="sm" tone="muted">
             {stock.reserved > 0
               ? `${stock.reserved} more ${stock.reserved === 1 ? "is" : "are"} held by open checkouts and return to stock if they aren't paid.`
               : "None held by open checkouts."}
           </Text>
+          {stock.held > 0 && (
+            <Text size="sm" tone="muted">
+              {`${stock.held} ${stock.held === 1 ? "is" : "are"} held by orders that need review and stay off stock until they're resolved.`}
+            </Text>
+          )}
         </aside>
       </div>
     </section>

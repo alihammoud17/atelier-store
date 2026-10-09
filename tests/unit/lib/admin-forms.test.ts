@@ -5,6 +5,7 @@ import {
   imageUrlError,
   MAX_DETAILS,
   MAX_STOCK_QUANTITY,
+  parseAdjustStockForm,
   parseCategoryForm,
   parseDetails,
   parsePriceCents,
@@ -215,5 +216,41 @@ describe("parseStockForm", () => {
     { productId: "7", expected: "1.5" },
   ])("treats a tampered form as invalid: %j", (fields) => {
     expect(parseStockForm(form({ ...fields, quantity: "5" }))).toEqual({ ok: false, invalid: true });
+  });
+});
+
+describe("parseAdjustStockForm", () => {
+  test("turns the amount and the button pressed into a signed change", () => {
+    expect(parseAdjustStockForm(form({ productId: "7", direction: "add", amount: "12" }))).toEqual({
+      ok: true,
+      value: { productId: 7, delta: 12 },
+    });
+    expect(parseAdjustStockForm(form({ productId: "7", direction: "remove", amount: "3" }))).toEqual({
+      ok: true,
+      value: { productId: 7, delta: -3 },
+    });
+    expect(
+      parseAdjustStockForm(form({ productId: "7", direction: "add", amount: String(MAX_STOCK_QUANTITY) })).ok,
+    ).toBe(true);
+  });
+
+  test.each(["0", "-1", "-5", "+5", "1.5", "1e3", "0x10", "", " ", "abc", String(MAX_STOCK_QUANTITY + 1)])(
+    "rejects the amount %j as a field error",
+    (amount) => {
+      const parsed = parseAdjustStockForm(form({ productId: "7", direction: "remove", amount }));
+      expect(parsed).toEqual({ ok: false, fieldErrors: { amount: expect.any(String) } });
+    },
+  );
+
+  test.each([
+    { productId: "0", direction: "add" },
+    { productId: "-7", direction: "add" },
+    { productId: "abc", direction: "add" },
+    { productId: "", direction: "add" },
+    { productId: "7", direction: "" },
+    { productId: "7", direction: "set" },
+    { productId: "7", direction: "ADD" },
+  ])("treats a tampered form as invalid: %j", (fields) => {
+    expect(parseAdjustStockForm(form({ ...fields, amount: "5" }))).toEqual({ ok: false, invalid: true });
   });
 });

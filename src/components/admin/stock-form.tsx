@@ -16,15 +16,16 @@ type StockFormProps = {
 
 /**
  * Sets a product's available stock. It sends the quantity it showed as `expected`, so the
- * update is refused if a checkout or another admin changed stock in the meantime; the form
- * then shows the current value to start from.
+ * update is refused if a checkout or another admin changed stock in the meantime. After a save
+ * or a refusal the action revalidates, so the page re-renders with the current value to start
+ * from: `available` is always the latest stock, whichever form changed it.
  */
 export function StockForm({ productId, productName, available, className }: StockFormProps) {
   const [state, action, pending] = useActionState<StockFormState, FormData>(updateStockAction, null);
-  // After a save or a conflict, the action reports what the database holds now.
-  const expected = state?.quantity ?? available;
   const id = `stock-${productId}`;
   const error = state?.fieldErrors?.quantity;
+  // What was typed before a rejected save, unless stock has moved since.
+  const typed = state?.values?.expected === String(available) ? state.values.quantity : undefined;
 
   return (
     <form
@@ -37,14 +38,14 @@ export function StockForm({ productId, productName, available, className }: Stoc
       className={cx("flex flex-col gap-2", className)}
     >
       <input type="hidden" name="productId" value={productId} />
-      <input type="hidden" name="expected" value={expected} />
+      <input type="hidden" name="expected" value={available} />
       <div className="flex items-center gap-3">
         <label htmlFor={id} className="sr-only">
           Available stock for {productName}
         </label>
         <input
           // Remount when the database value changes so the field shows it.
-          key={expected}
+          key={available}
           id={id}
           name="quantity"
           type="number"
@@ -52,7 +53,7 @@ export function StockForm({ productId, productName, available, className }: Stoc
           max={MAX_STOCK_QUANTITY}
           step={1}
           inputMode="numeric"
-          defaultValue={expected}
+          defaultValue={typed ?? available}
           aria-invalid={error ? true : undefined}
           aria-describedby={`${id}-message`}
           className={cx(

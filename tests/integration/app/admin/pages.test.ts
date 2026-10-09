@@ -82,6 +82,25 @@ describe("admin pages", () => {
     expect(orderHtml).toContain(`/admin/products/${product.id}`);
   });
 
+  test("the stock page and product stock panel show status, units held for review and the adjust form", async () => {
+    const coat = await createProduct({ name: "Linen shirt", stock: 2 });
+    await createProduct({ name: "Silk scarf", stock: 0 });
+    await createOrder({ status: "needs_review", items: [{ product: coat, quantity: 3 }] });
+    await signUpAndSignIn({ role: "admin" });
+
+    const stockHtml = renderToStaticMarkup(await (AdminStockPage as Page)(props()));
+    // The storefront's statuses: 2 left is low, 0 is sold out.
+    expect(stockHtml).toContain("1 sold out · 1 low");
+    expect(stockHtml).toContain(">Low<");
+    expect(stockHtml).toContain(">Sold out<");
+    expect(stockHtml).toContain("Units to add or remove for Linen shirt");
+    expect(stockHtml).toContain("Units to add or remove for Silk scarf");
+
+    const productHtml = renderToStaticMarkup(await (AdminProductPage as Page)(props({ productId: String(coat.id) })));
+    expect(productHtml).toContain("Units to add or remove for Linen shirt");
+    expect(productHtml).toContain("3 are held by orders that need review");
+  });
+
   test.each([
     ["/admin/products/[productId]", AdminProductPage, { productId: "999999" }],
     ["/admin/products/[productId]", AdminProductPage, { productId: "abc" }],

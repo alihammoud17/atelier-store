@@ -290,3 +290,33 @@ export function parseStockForm(
     () => ({ productId, quantity: quantity!, expected }),
   );
 }
+
+export type AdjustStockField = "amount";
+
+/** Adjust form result; `quantity` is the stock now in the database, when known. */
+export type AdjustStockFormState = (NonNullable<AdminFormState<AdjustStockField>> & { quantity?: number }) | null;
+
+export type AdjustStockInput = {
+  productId: number;
+  /** Units to add (positive) or remove (negative); never 0. */
+  delta: number;
+};
+
+/**
+ * Adjust form: a positive amount plus the button pressed (`direction`: add or remove). Whether
+ * the result stays within 0 to MAX_STOCK_QUANTITY is checked by the update itself, against the
+ * stock at that moment. A bad product ID or direction means a tampered form.
+ */
+export function parseAdjustStockForm(
+  formData: FormData,
+): ParseResult<AdjustStockInput, AdjustStockField> | { ok: false; invalid: true } {
+  const productId = toPositiveInt(text(formData, "productId"));
+  const direction = text(formData, "direction");
+  if (productId === null || (direction !== "add" && direction !== "remove")) return { ok: false, invalid: true };
+
+  const amount = boundedInt(text(formData, "amount"), MAX_STOCK_QUANTITY);
+  return result<AdjustStockInput, AdjustStockField>(
+    { amount: amount === null || amount === 0 ? `Enter a whole number from 1 to ${MAX_STOCK_QUANTITY}.` : undefined },
+    () => ({ productId, delta: direction === "add" ? amount! : -amount! }),
+  );
+}
