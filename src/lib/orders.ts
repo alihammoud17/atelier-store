@@ -556,3 +556,51 @@ export async function getCustomerOrder(userId: string, orderId: string) {
     },
   });
 }
+
+// ---------------------------------------------------------------------------------------------
+// Admin order views. Callers must call requireAdmin() first: these aren't scoped to a user.
+
+/** Placed orders from every customer and guest, newest first, optionally of one status. */
+export async function getAdminOrders({ status, limit = 100 }: { status?: OrderStatus; limit?: number } = {}) {
+  return db.query.orders.findMany({
+    where: status ? and(placedOrder, eq(orders.status, status)) : placedOrder,
+    columns: { id: true, status: true, email: true, totalCents: true, createdAt: true },
+    with: {
+      user: { columns: { name: true, email: true } },
+      items: { columns: { quantity: true } },
+    },
+    orderBy: desc(orders.createdAt),
+    limit,
+  });
+}
+
+/** Any placed order with the details staff need; undefined for an invalid or unplaced ID. */
+export async function getAdminOrder(orderId: string) {
+  if (!isOrderId(orderId)) return undefined;
+  return db.query.orders.findFirst({
+    where: and(eq(orders.id, orderId), placedOrder),
+    columns: {
+      id: true,
+      status: true,
+      email: true,
+      currency: true,
+      subtotalCents: true,
+      totalCents: true,
+      shippingDetails: true,
+      stripeCheckoutSessionId: true,
+      stripePaymentIntentId: true,
+      createdAt: true,
+      updatedAt: true,
+      paidAt: true,
+      stockReleasedAt: true,
+    },
+    with: {
+      user: { columns: { id: true, name: true, email: true } },
+      items: {
+        columns: { id: true, productId: true, productName: true, unitPriceCents: true, quantity: true },
+        orderBy: asc(orderItems.id),
+        with: { product: { columns: { slug: true, imageSrc: true } } },
+      },
+    },
+  });
+}
