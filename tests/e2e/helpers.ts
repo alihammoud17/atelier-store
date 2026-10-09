@@ -1,5 +1,7 @@
 import { randomBytes, randomInt } from "node:crypto";
 import { test as base, expect, type Page } from "@playwright/test";
+import { Client } from "pg";
+import { e2eDatabaseUrl } from "./env";
 
 /**
  * Every test gets its own client IP. Better Auth rate-limits sign-up and sign-in per IP
@@ -43,3 +45,19 @@ export async function signIn(page: Page, customer: { email: string; password: st
 
 /** The header's bag link, whose accessible name carries the item count. */
 export const bagLink = (page: Page) => page.getByRole("banner").getByRole("link", { name: /^Shopping bag/ });
+
+/**
+ * Signs up a customer and grants them the admin role in the database, as
+ * `pnpm auth:make-admin` does. requireAdmin() skips the cookie cache, so it applies at once.
+ */
+export async function signUpAdmin(page: Page) {
+  const admin = await signUp(page, newCustomer("Grace Hopper"));
+  const client = new Client({ connectionString: e2eDatabaseUrl() });
+  try {
+    await client.connect();
+    await client.query(`update "user" set role = 'admin' where email = $1`, [admin.email]);
+  } finally {
+    await client.end();
+  }
+  return admin;
+}
