@@ -81,3 +81,11 @@ export function ArrowRightIcon(props: ComponentProps<"svg">) {
     </Icon>
   );
 }
+
+export function ChevronDownIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M6 9l6 6 6-6" />
+    </Icon>
+  );
+}
