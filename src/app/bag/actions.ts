@@ -2,23 +2,12 @@
 
 import { type BagActionState, MAX_BAG_LINES, MAX_LINE_QUANTITY } from "@/lib/bag";
 import { readBag, writeBag } from "@/lib/bag-server";
+import { toInt, toPositiveInt } from "@/lib/form-values";
 import { getBagProducts } from "@/lib/products";
 
 // Bag mutations. They accept only a product ID and a quantity; price and stock always come
 // from the database. No session check: guests can shop and these only touch the caller's own
 // cookie. Server actions are public endpoints, so every argument is validated here.
-
-// Form values arrive as strings. Only plain digits count: Number() would also turn "", " ",
-// "1e3" and "0x10" into numbers.
-function toInt(value: unknown) {
-  const number = typeof value === "string" ? (/^\d{1,15}$/.test(value) ? Number(value) : NaN) : value;
-  return typeof number === "number" && Number.isSafeInteger(number) ? number : null;
-}
-
-function toPositiveInt(value: unknown) {
-  const number = toInt(value);
-  return number !== null && number > 0 ? number : null;
-}
 
 function toQuantity(value: unknown) {
   const number = toInt(value);
