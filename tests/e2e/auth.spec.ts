@@ -46,8 +46,10 @@ test("signed-out visitors are sent to sign-in from protected pages", async ({ pa
 
 test("customers get a 404 from the admin area", async ({ page }) => {
   await signUp(page, newCustomer());
-  const response = await page.goto("/admin");
-  expect(response?.status()).toBe(404);
+  for (const path of ["/admin", "/admin/products", "/admin/orders"]) {
+    const response = await page.goto(path);
+    expect(response?.status(), path).toBe(404);
+  }
 });
 
 test("repeated failed sign-ins are rate limited", async ({ page }) => {
